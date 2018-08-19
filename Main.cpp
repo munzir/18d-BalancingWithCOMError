@@ -45,15 +45,15 @@ using namespace dart::math;
 
 struct comOptParams {
   SkeletonPtr robot;
-  Eigen::Matrix<double, 25, 1> qInit;
+  Eigen::Matrix<double, 24, 1> qInit;
 };
 
 double comOptFunc(const std::vector<double> &x, std::vector<double> &grad, void *my_func_data) {
   comOptParams* optParams = reinterpret_cast<comOptParams *>(my_func_data);
-  Eigen::Matrix<double, 25, 1> q(x.data());
+  Eigen::Matrix<double, 24, 1> q(x.data());
 
   if (!grad.empty()) {
-    Eigen::Matrix<double, 25, 1> mGrad = q-optParams->qInit;
+    Eigen::Matrix<double, 24, 1> mGrad = q-optParams->qInit;
     Eigen::VectorXd::Map(&grad[0], mGrad.size()) = mGrad;
   }
   return (0.5*pow((q-optParams->qInit).norm(), 2));
@@ -61,7 +61,7 @@ double comOptFunc(const std::vector<double> &x, std::vector<double> &grad, void 
 
 double comConstraint(const std::vector<double> &x, std::vector<double> &grad, void *com_const_data) {
   comOptParams* optParams = reinterpret_cast<comOptParams *>(com_const_data);
-  Eigen::Matrix<double, 25, 1> q(x.data());
+  Eigen::Matrix<double, 24, 1> q(x.data());
   optParams->robot->setPositions(q);
   return (pow(optParams->robot->getCOM()(0)-optParams->robot->getPosition(3), 2) \
     + pow(optParams->robot->getCOM()(1)-optParams->robot->getPosition(4), 2));
@@ -69,14 +69,14 @@ double comConstraint(const std::vector<double> &x, std::vector<double> &grad, vo
 
 double wheelAxisConstraint(const std::vector<double> &x, std::vector<double> &grad, void *wheelAxis_const_data) {
   comOptParams* optParams = reinterpret_cast<comOptParams *>(wheelAxis_const_data);
-  Eigen::Matrix<double, 25, 1> q(x.data());
+  Eigen::Matrix<double, 24, 1> q(x.data());
   optParams->robot->setPositions(q);
   return optParams->robot->getBodyNode(0)->getTransform().matrix()(2,0);
 }
 
 double headingConstraint(const std::vector<double> &x, std::vector<double> &grad, void *heading_const_data) {
   comOptParams* optParams = reinterpret_cast<comOptParams *>(heading_const_data);
-  Eigen::Matrix<double, 25, 1> q(x.data());
+  Eigen::Matrix<double, 24, 1> q(x.data());
   optParams->robot->setPositions(q);
   Eigen::Matrix<double, 4, 4> Tf = optParams->robot->getBodyNode(0)->getTransform().matrix();
   double heading = atan2(Tf(0,0), -Tf(1,0));
@@ -91,7 +91,9 @@ dart::dynamics::SkeletonPtr createKrang() {
   // Load the Skeleton from a file
   dart::utils::DartLoader loader;
   dart::dynamics::SkeletonPtr krang =
-      loader.parseSkeleton("/home/panda/myfolder/wholebodycontrol/09-URDF/Krang/KrangOld.urdf");
+      // INPUT on below line (Krang urdf file)
+      //loader.parseSkeleton("/home/panda/myfolder/wholebodycontrol/09-URDF/Krang/KrangOld.urdf");
+      loader.parseSkeleton("/home/apatel435/Desktop/WholeBodyControlAttempt1/09-URDF/Krang/KrangNoKinect.urdf");
   krang->setName("krang");
 
   // Initiale pose parameters
@@ -103,8 +105,8 @@ dart::dynamics::SkeletonPtr createKrang() {
   double qRWheelInit = 0;
   double qWaistInit = -4*M_PI/3;
   double qTorsoInit = 0;
-  double qKinectInit = 0;
-  Eigen::Matrix<double, 7, 1> qLeftArmInit; 
+  //double qKinectInit = 0;
+  Eigen::Matrix<double, 7, 1> qLeftArmInit;
   qLeftArmInit << 1.102, -0.589, 0.000, -1.339, 0.000, 0.3, 0.000;
   Eigen::Matrix<double, 7, 1> qRightArmInit;
   qRightArmInit << -1.102, 0.589, 0.000, 1.339, 0.000, 1.4, 0.000;*/
@@ -115,7 +117,7 @@ dart::dynamics::SkeletonPtr createKrang() {
   char line [1024];
   file.getline(line, 1024);
   std::istringstream stream(line);
-  Eigen::Matrix<double, 24, 1> initPoseParams; // heading, qBase, x, y, z, qLWheel, qRWheel, qWaist, qTorso, qKinect, qLArm0, ... qLArm6, qRArm0, ..., qRArm6
+  Eigen::Matrix<double, 24, 1> initPoseParams; // heading, qBase, x, y, z, qLWheel, qRWheel, qWaist, qTorso, qLArm0, ... qLArm6, qRArm0, ..., qRArm6
   size_t i = 0; double newDouble;
   while((i < 24) && (stream >> newDouble)) initPoseParams(i++) = newDouble;
   file.close();
@@ -126,11 +128,10 @@ dart::dynamics::SkeletonPtr createKrang() {
   double qRWheelInit; qRWheelInit = initPoseParams(6);
   double qWaistInit; qWaistInit = initPoseParams(7);
   double qTorsoInit; qTorsoInit = initPoseParams(8);
-  double qKinectInit; qKinectInit = initPoseParams(9);
-  Eigen::Matrix<double, 7, 1> qLeftArmInit; qLeftArmInit << initPoseParams.segment(10, 7);
-  Eigen::Matrix<double, 7, 1> qRightArmInit; qRightArmInit << initPoseParams.segment(17, 7);
-  
-  // Calculating the axis angle representation of orientation from headingInit and qBaseInit: 
+  Eigen::Matrix<double, 7, 1> qLeftArmInit; qLeftArmInit << initPoseParams.segment(9, 7);
+  Eigen::Matrix<double, 7, 1> qRightArmInit; qRightArmInit << initPoseParams.segment(16, 7);
+
+  // Calculating the axis angle representation of orientation from headingInit and qBaseInit:
   // RotX(pi/2)*RotY(-pi/2+headingInit)*RotX(-qBaseInit)
   Eigen::Transform<double, 3, Eigen::Affine> baseTf = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
   baseTf.prerotate(Eigen::AngleAxisd(-qBaseInit,Eigen::Vector3d::UnitX())).prerotate(Eigen::AngleAxisd(-M_PI/2+headingInit,Eigen::Vector3d::UnitY())).prerotate(Eigen::AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()));
@@ -140,7 +141,7 @@ dart::dynamics::SkeletonPtr createKrang() {
   const int dof = (const int)krang->getNumDofs();
   comOptParams optParams;
   optParams.robot = krang;
-  optParams.qInit << aa.angle()*aa.axis(), xyzInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qKinectInit, qLeftArmInit, qRightArmInit; 
+  optParams.qInit << aa.angle()*aa.axis(), xyzInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qLeftArmInit, qRightArmInit;
   nlopt::opt opt(nlopt::LN_COBYLA, dof);
   std::vector<double> q_vec(dof);
   double minf;
@@ -151,8 +152,8 @@ dart::dynamics::SkeletonPtr createKrang() {
   opt.set_xtol_rel(1e-4);
   opt.set_maxtime(10);
   opt.optimize(q_vec, minf);
-  Eigen::Matrix<double, 25, 1> q(q_vec.data());
-  
+  Eigen::Matrix<double, 24, 1> q(q_vec.data());
+
   // Initializing the configuration
   krang->setPositions(q);
 
