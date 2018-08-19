@@ -39,7 +39,8 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   assert(_robot != nullptr);
   int dof = mRobot->getNumDofs();
   std::cout << "[controller] DoF: " << dof << std::endl;
-  mForces.setZero(19);
+  //mForces.setZero(19);
+  mForces.setZero(18);
   mSteps = 0;
   mdt = mRobot->getTimeStep();
 
@@ -52,14 +53,15 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
 
   int bodyParams = 4; double minXCOMError = 0.02, maxDeviation = 0.50, maxOffset = 0.50;
   changeRobotParameters(mGuessRobot, bodyParams, minXCOMError, maxDeviation, maxOffset);
-  
+
   // ************** Lock joints
   int joints = mRobot->getNumJoints();
   for(int i=3; i < joints; i++) {
     mRobot->getJoint(i)->setActuatorType(dart::dynamics::Joint::ActuatorType::LOCKED);
     mGuessRobot->getJoint(i)->setActuatorType(dart::dynamics::Joint::ActuatorType::LOCKED);
   }
-  mdqFilt = new filter(25, 100);
+  //mdqFilt = new filter(25, 100);
+  mdqFilt = new filter(24, 100);
 
   // ************** Wheel Radius and Distance between wheels
   mR = 0.25, mL = 0.68;
@@ -68,11 +70,11 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   Configuration *  cfg = Configuration::create();
   const char *     scope = "";
   const char *     configFile = "../controlParams.cfg";
-  
+
   try {
     cfg->parse(configFile);
-    
-    // -- com error 
+
+    // -- com error
     mInitialComAngle = M_PI*(cfg->lookupFloat(scope, "initialComAngle")/180);
   } catch(const ConfigurationException & ex) {
       cerr << ex.c_str() << endl;
@@ -82,7 +84,7 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
 
   // ********************************** Introduce CoM error
   qBody1Change(mRobot, mInitialComAngle);
-  qBody1Change(mGuessRobot, mInitialComAngle);  
+  qBody1Change(mGuessRobot, mInitialComAngle);
   Eigen::Vector3d com = mRobot->getCOM() - mRobot->getPositions().segment(3,3);
   cout << "robot com: " << com << endl;
   cout << "robot com angle: " << atan2(com(0), com(2))*180.0/M_PI << endl;
@@ -91,18 +93,21 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   cout << "guess com angle: " << atan2(com(0), com(2))*180.0/M_PI << endl;
 
   //*********************************** Read Initial Pose for Pose Regulation
-  Eigen::Matrix<double, 25, 1> qInit = mRobot->getPositions();
+  Eigen::Matrix<double, 24, 1> qInit = mRobot->getPositions();
   mBaseTf = mRobot->getBodyNode(0)->getTransform().matrix();
   double psiInit =  atan2(mBaseTf(0,0), -mBaseTf(1,0));
   double qBody1Init = atan2(mBaseTf(0,1)*cos(psiInit) + mBaseTf(1,1)*sin(psiInit), mBaseTf(2,1));
   mqBodyInit(0) = qBody1Init;
-  mqBodyInit.tail(17) = qInit.tail(17);
+  //mqBodyInit.tail(17) = qInit.tail(17);
+  mqBodyInit.tail(16) = qInit.tail(16);
 
   //*********************************** Initialize Extended State Observer
   initializeExtendedStateObservers();
-  
+
   // **************************** Torque Limits
-  mTauLim << 120, 740, 370, 10, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
+  //mTauLim << 120, 740, 370, 10, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
+  //TODO: Which one is the Kinect ahhhhh!!!
+  mTauLim << 120, 740, 370, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
 
   // **************************** Data Output
   mOutFile.open("output.csv");
@@ -165,7 +170,7 @@ void Controller::changeRobotParameters(dart::dynamics::SkeletonPtr robot, int bo
   double mxi, pert_mxi;
   double myi, pert_myi;
   double mzi, pert_mzi;
-  
+
   // Generate perturbed parameters
   double deviation;
   double offset;
@@ -214,7 +219,8 @@ void Controller::updatePositions(){
   mpsi =  atan2(mBaseTf(0,0), -mBaseTf(1,0));
   mqBody1 = atan2(mBaseTf(0,1)*cos(mpsi) + mBaseTf(1,1)*sin(mpsi), mBaseTf(2,1));
   mqBody(0) = mqBody1;
-  mqBody.tail(17) = mq.tail(17);
+  //mqBody.tail(17) = mq.tail(17);
+  mqBody.tail(16) = mq.tail(16);
   mRot0 << cos(mpsi), sin(mpsi), 0,
           -sin(mpsi), cos(mpsi), 0,
           0, 0, 1;
@@ -235,10 +241,11 @@ void Controller::updateSpeeds(){
   mdqBody1 = -mdq(0);
   mdpsi = (mBaseTf.block<3,3>(0,0) * mdq.head(3))(2);
   mdqBody(0) = mdqBody1;
-  mdqBody.tail(17) = mdq.tail(17);
+  //mdqBody.tail(17) = mdq.tail(17);
+  mdqBody.tail(16) = mdq.tail(16);
   mdqMin(0) = mdx;
   mdqMin(1) = mdpsi;
-  mdqMin.tail(18) = mdqBody;
+  mdqMin.tail(17) = mdqBody;
   mdRot0 << (-sin(mpsi)*mdpsi), (cos(mpsi)*mdpsi), 0,
            (-cos(mpsi)*mdpsi), (-sin(mpsi)*mdpsi), 0,
            0, 0, 0;
@@ -253,7 +260,7 @@ void Controller::initializeExtendedStateObservers() {
 
   updatePositions();
   updateSpeeds();
-  
+
   mthWheel = 0.0;
   mthWheel_hat = 0.0;
   mdthWheel_hat = 0.0;
@@ -263,7 +270,7 @@ void Controller::initializeExtendedStateObservers() {
   Eigen::Vector3d COM = mRot0*(getBodyCOM(mGuessRobot)-mxyz0);
   mthCOM_hat = atan2(COM(0), COM(2));
   mdthCOM_hat = mdqBody1;
-  mf_thCOM = 0.0;      
+  mf_thCOM = 0.0;
 }
 
 void Controller::updateExtendedStateObserverParameters() {
@@ -279,10 +286,10 @@ void Controller::updateExtendedStateObserverParameters() {
   double m_w;
   double I_wa;
   double M_g;
-  double l_g; 
+  double l_g;
   double I_yy;
   double delta, c1, c2; // Intermediate Parameters
-  
+
   // Our intermediate Variables
   double ixx, iyy, izz, ixy, ixz, iyz;
   Eigen::Vector3d COM;
@@ -314,11 +321,11 @@ void Controller::updateExtendedStateObserverParameters() {
   nBodies = mRobot->getNumBodyNodes();
   iBody = Eigen::Matrix3d::Zero();
   baseFrame = mRobot->getBodyNode("Base");
-  for(int i=0; i<nBodies; i++){ 
+  for(int i=0; i<nBodies; i++){
     if(i==1 || i==2) continue; // Skip wheels
     b = mRobot->getBodyNode(i);
     b->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
-    rot = b->getTransform(baseFrame).rotation(); 
+    rot = b->getTransform(baseFrame).rotation();
     t = mRobot->getCOM(baseFrame) - b->getCOM(baseFrame) ; // Position vector from local COM to body COM expressed in base frame
     m = b->getMass();
     iMat << ixx, ixy, ixz, // Inertia tensor of the body around its CoM expressed in body frame
@@ -332,16 +339,16 @@ void Controller::updateExtendedStateObserverParameters() {
     iBody += iMat;
   }
   I_yy = iBody(0, 0);
-  
+
   // Intermediate Parameters
   delta = (M_g*l_g+I_yy+pow(gamma,2)*I_ra)*(M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2)-pow(M_g*r_w*l_g-I_ra*pow(gamma,2),2);
   c1 = (M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2)+M_g*r_w*l_g+I_ra*pow(gamma,2);
   c2 = M_g*r_w*l_g+M_g*pow(l_g,2)+I_yy;
-  
+
   // ******************** Robot dynamics for LQR Gains (Not used)
   Eigen::Matrix<double, 4, 4> A;
   Eigen::Matrix<double, 4, 1> B;
-  
+
   A << 0, 0, 1, 0,
        0, 0, 0, 1,
        ((M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, -c1*c_w/delta, c1*c_w/delta,
@@ -401,11 +408,11 @@ void Controller::updateExtendedStateObserverStates() {
   // Integrate Dynamics
   // mA_, mL_1, mB_1, mL_2, mB_2;
   Eigen::Vector3d x, xdot;
-  
+
   x << mthWheel_hat, mdthWheel_hat, mf_thWheel;
   xdot = mA_*x + mL_1*(mthWheel - mthWheel_hat) + mB_1*mu_thWheel;
   x += xdot*mdt; mthWheel_hat = x(0); mdthWheel_hat = x(1); mf_thWheel = x(2);
-  
+
   x << mthCOM_hat, mdthCOM_hat, mf_thCOM;
   xdot = mA_*x + mL_2*(mthCOM - mthCOM_hat) + mB_2*mu_thCOM;
   x += xdot*mdt; mthCOM_hat = x(0); mdthCOM_hat = x(1); mf_thCOM = x(2);
@@ -414,7 +421,7 @@ void Controller::updateExtendedStateObserverStates() {
 // ==========================================================================
 double Controller::activeDisturbanceRejectionControl() {
 
-  // ****************** The following F comes from Bodgan and Nathan's code 
+  // ****************** The following F comes from Bodgan and Nathan's code
   Eigen::Matrix<double, 4, 1> F;
   // F << -444.232838220247,   -13.8564064605507,   -111.681669536162,   -26.3837189119712;
   // F << -1848.03012979190,    -13.8564064605509,   -269.597433286135,   -18.3661533292315;
@@ -429,7 +436,7 @@ double Controller::activeDisturbanceRejectionControl() {
   // F << -504.249793519900, -0.200000000000233,  -109.459675610606, -1.02733243214781;
   // Explodes ???
   // F << -505.168127552260,  -0.200000000003292,  -109.618042362170, -1.04301620674174;
-  // F << -500.481166823486,  -0.173205080751090,  -108.809840324047, -0.958459823947375;      
+  // F << -500.481166823486,  -0.173205080751090,  -108.809840324047, -0.958459823947375;
   // GOOD
   // F << -500.4811784741, -0.1732050808, -108.8098652890, -0.9584598411;
   // F << -3617.30655560822,    -69.2820323027686,   -676.022987559394,   -95.4128736402033;
@@ -439,17 +446,17 @@ double Controller::activeDisturbanceRejectionControl() {
   // F << -2443.80123228903,    0.0,   0.0,   0.0;
   F << -953.5142, -13.8564, -330.9289, -29.5582; // By Munzir, based on A, B matrices calculated in updateESOParameters() function
 
-  
+
   // Observer Control Gains
   double F_thWheel = F(1);
   double F_dthWheel = F(3);
   double F_thCOM = F(0);
   double F_dthCOM = F(2);
-  
+
   // Observer Control Update
   mu_thWheel = -F_thWheel*(mthWheel_hat - 0) - F_dthWheel*(mdthWheel_hat - 0);
   mu_thCOM = -F_thCOM*(mthCOM_hat - 0) - F_dthCOM*(mdthCOM_hat - 0);
-  
+
   // Active Disturbance Rejection Control
   return mu_thWheel + mu_thCOM - mf_thWheel/mB_1(1) - mf_thCOM/mB_2(1);
 
@@ -467,26 +474,27 @@ double Controller::activeDisturbanceRejectionControl() {
 
 //=========================================================================
 void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::Vector3d& _RightTargetPosition) {
- 
+
   // increase the step counter
   mSteps++;
-  
+
   // updates mBaseTf, mq, mxyz0, mpsi, mqBody1, mqBody, mRot0
   // Needs mRobot
   updatePositions();
-  
-  // updates mdq, mdxyz0, mdx, mdqBody1, mdpsi, mdqBody, mdqMin, dRot0 
+
+  // updates mdq, mdxyz0, mdx, mdqBody1, mdpsi, mdqBody, mdqMin, dRot0
   // Needs mRobot, mdqFilt, mBaseTf, mqBody1
   updateSpeeds();
-  
+
   // Apply the Control
   double wheelsTorque;
   wheelsTorque = activeDisturbanceRejectionControl();
   mForces(0) = 0.5*wheelsTorque;
   mForces(1) = 0.5*wheelsTorque;
-  const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
-  mRobot->setForces(index, mForces);  
-  
+  //const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
+  const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
+  mRobot->setForces(index, mForces);
+
   // Update Extended State Observer
   updateExtendedStateObserverParameters();
   updateExtendedStateObserverStates();

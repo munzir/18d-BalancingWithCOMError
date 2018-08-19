@@ -44,7 +44,7 @@
 
 
 using namespace dart;
-using namespace std;  
+using namespace std;
 using namespace config4cpp;
 
 class filter {
@@ -56,7 +56,7 @@ class filter {
     }
     void AddSample(Eigen::VectorXd v)
     {
-      if(samples.full()) 
+      if(samples.full())
       {
         total -= samples.front();
       }
@@ -64,11 +64,11 @@ class filter {
       total += v;
       average = total/samples.size();
     }
-  
+
     boost::circular_buffer<Eigen::VectorXd> samples;
     Eigen::VectorXd total;
     Eigen::VectorXd average;
-    
+
 };
 
 /// \brief Operational space controller for 6-dof manipulator
@@ -112,7 +112,8 @@ public:
   dart::dynamics::SkeletonPtr mRobot, mGuessRobot;
 
   /// \brief Control forces
-  Eigen::Matrix<double, 19, 1> mForces;
+  //Eigen::Matrix<double, 19, 1> mForces;
+  Eigen::Matrix<double, 18, 1> mForces;
 
   size_t mSteps;
 
@@ -123,23 +124,27 @@ public:
   double mR, mL;
 
   Eigen::Matrix<double, 4, 4> mBaseTf;
-  Eigen::Matrix<double, 25, 1> mq;
+  Eigen::Matrix<double, 24, 1> mq;
   Eigen::Vector3d mxyz0; // position of frame 0 in the world frame represented in the world frame
   double mpsi;
   double mqBody1;
-  Eigen::Matrix<double, 18, 1> mqBody;
+  //Eigen::Matrix<double, 18, 1> mqBody;
+  Eigen::Matrix<double, 19, 1> mqBody;
   double mthWheel, mthCOM, mthCOM_true;
-  
-  Eigen::Matrix<double, 25, 1> mdq;
+
+  Eigen::Matrix<double, 24, 1> mdq;
   Eigen::Vector3d mdxyz0;
   double mdx, mdqBody1, mdpsi;
-  Eigen::Matrix<double, 18, 1> mdqBody;  
-  Eigen::Matrix<double, 20, 1> mdqMin;
+  //Eigen::Matrix<double, 18, 1> mdqBody;
+  Eigen::Matrix<double, 17, 1> mdqBody;
+  //Eigen::Matrix<double, 20, 1> mdqMin;
+  Eigen::Matrix<double, 19, 1> mdqMin;
   double mdthR, mdthL, mdthWheel, mdthCOM;
 
   Eigen::Matrix3d mRot0, mdRot0;
 
-  Eigen::Matrix<double, 18, 1> mTauLim;
+  //Eigen::Matrix<double, 18, 1> mTauLim;
+  Eigen::Matrix<double, 17, 1> mTauLim;
 
   bool maxTimeSet = 0;
 
