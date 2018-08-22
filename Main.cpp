@@ -93,7 +93,7 @@ dart::dynamics::SkeletonPtr createKrang() {
   dart::dynamics::SkeletonPtr krang =
       // INPUT on below line (Krang urdf file)
       //loader.parseSkeleton("/home/panda/myfolder/wholebodycontrol/09-URDF/Krang/KrangOld.urdf");
-      loader.parseSkeleton("/home/apatel435/Desktop/WholeBodyControlAttempt1/09-URDF/Krang/KrangNoKinect.urdf");
+      loader.parseSkeleton("/home/apatel435/Desktop/WholeBodyControlAttempt1/09-URDF/Krang/Krang.urdf");
   krang->setName("krang");
 
   // Initiale pose parameters
