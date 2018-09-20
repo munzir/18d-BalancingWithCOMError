@@ -39,7 +39,6 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   assert(_robot != nullptr);
   int dof = mRobot->getNumDofs();
   std::cout << "[controller] DoF: " << dof << std::endl;
-  //mForces.setZero(19);
   mForces.setZero(18);
   mSteps = 0;
   mdt = mRobot->getTimeStep();
@@ -60,7 +59,6 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
     mRobot->getJoint(i)->setActuatorType(dart::dynamics::Joint::ActuatorType::LOCKED);
     mGuessRobot->getJoint(i)->setActuatorType(dart::dynamics::Joint::ActuatorType::LOCKED);
   }
-  //mdqFilt = new filter(25, 100);
   mdqFilt = new filter(24, 100);
 
   // ************** Wheel Radius and Distance between wheels
@@ -98,15 +96,12 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   double psiInit =  atan2(mBaseTf(0,0), -mBaseTf(1,0));
   double qBody1Init = atan2(mBaseTf(0,1)*cos(psiInit) + mBaseTf(1,1)*sin(psiInit), mBaseTf(2,1));
   mqBodyInit(0) = qBody1Init;
-  //mqBodyInit.tail(17) = qInit.tail(17);
   mqBodyInit.tail(16) = qInit.tail(16);
 
   //*********************************** Initialize Extended State Observer
   initializeExtendedStateObservers();
 
   // **************************** Torque Limits
-  //mTauLim << 120, 740, 370, 10, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
-  //TODO: Which one is the Kinect ahhhhh!!!
   mTauLim << 120, 740, 370, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
 
   // **************************** Data Output
@@ -219,7 +214,6 @@ void Controller::updatePositions(){
   mpsi =  atan2(mBaseTf(0,0), -mBaseTf(1,0));
   mqBody1 = atan2(mBaseTf(0,1)*cos(mpsi) + mBaseTf(1,1)*sin(mpsi), mBaseTf(2,1));
   mqBody(0) = mqBody1;
-  //mqBody.tail(17) = mq.tail(17);
   mqBody.tail(16) = mq.tail(16);
   mRot0 << cos(mpsi), sin(mpsi), 0,
           -sin(mpsi), cos(mpsi), 0,
@@ -241,7 +235,6 @@ void Controller::updateSpeeds(){
   mdqBody1 = -mdq(0);
   mdpsi = (mBaseTf.block<3,3>(0,0) * mdq.head(3))(2);
   mdqBody(0) = mdqBody1;
-  //mdqBody.tail(17) = mdq.tail(17);
   mdqBody.tail(16) = mdq.tail(16);
   mdqMin(0) = mdx;
   mdqMin(1) = mdpsi;
@@ -333,7 +326,7 @@ logical select(double *wr, double *wi) {         // the function to be passed as
 }
 
 // C function declaration for the DGEES fortran function in lapack library
-// see link: http://eigen.tuxfamily.org/index.php?title=Lapack 
+// see link: http://eigen.tuxfamily.org/index.php?title=Lapack
 // for a short tutorial describing how to do this
 extern "C" void dgees_(const char* JOBVS, const char* SORT, selectFcn* SELECT, const int* N, double* A, \
     const int* LDA, int* SDIM, double* WR, double* WI, double* VS, const int* LDVS, double* WORK, \
@@ -341,7 +334,7 @@ extern "C" void dgees_(const char* JOBVS, const char* SORT, selectFcn* SELECT, c
 
 // ==========================================================================
 Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eigen::Matrix<double, 4, 1>& B, Eigen::Matrix<double, 4, 4>& Q, Eigen::Matrix<double, 1, 1>& R) {
-  
+
   Eigen::Matrix<double, 8, 8> H;
   Eigen::MatrixXd M, dM, balM, sMat;
   int n, n2;
@@ -364,7 +357,7 @@ Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eige
   dM = M.diagonal().asDiagonal();
   balance_matrix(M-dM, balM, sMat);
   for(int i=0; i<8; i++) s(i) = log2(sMat(i,i));
-  for(int i=0; i<4; i++) D(i) = round((-s(i) + s(i+4))/2.0); 
+  for(int i=0; i<4; i++) D(i) = round((-s(i) + s(i+4))/2.0);
   for(int i=0; i<4; i++) {
     s(i) = pow(2.0, D(i));
     s(i+4) = pow(2.0, -D(i));
@@ -376,13 +369,13 @@ Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eige
   // Input Arguments for dgees_ call
   int LDA = H.outerStride();
   int LDVS = n2;
-  
+
   // Outputs of dgees_ call
   int SDIM;               // Number of eigenvalues (after sorting) for which SELECT is true
-  double WR[n2], WI[n2];  // Real and imaginary parts of the computed eigenvalues in the same order 
+  double WR[n2], WI[n2];  // Real and imaginary parts of the computed eigenvalues in the same order
                           // that they appear on the diagonal of the output Schur form T
   Eigen::Matrix<double, 8, 8> Z; // Contains the orthogonal matrix Z of Schur vectors
-  
+
   // The fixed part of the scratch space for dgees_ to do calculations
   logical BWORK[n2];
 
@@ -400,9 +393,9 @@ Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eige
     WORK.data(), &LWORK, &BWORK[0], &INFO );
 
   // ======================================== Post-Schur
-  // finding solution X to riccati equation 
+  // finding solution X to riccati equation
   X1 = Z.topLeftCorner(4 ,4);
-  X2 = Z.bottomLeftCorner(4 ,4);  
+  X2 = Z.bottomLeftCorner(4 ,4);
   Eigen::PartialPivLU<Eigen::Matrix<double, 4, 4>> lu(X1);
   L = Eigen::Matrix<double, 4, 4>::Identity();
   L.block<4,4>(0,0).triangularView<Eigen::StrictlyLower>() = lu.matrixLU();
@@ -505,8 +498,8 @@ void Controller::updateExtendedStateObserverParameters() {
   // ******************** Robot dynamics for LQR Gains (Not used)
   Eigen::Matrix<double, 4, 4> A, Q;
   Eigen::Matrix<double, 4, 1> B;
-  Eigen::Matrix<double, 1, 1> R; 
-  
+  Eigen::Matrix<double, 1, 1> R;
+
   A << 0, 0, 1, 0,
        0, 0, 0, 1,
        ((M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, -c1*c_w/delta, c1*c_w/delta,
@@ -530,12 +523,12 @@ void Controller::updateExtendedStateObserverParameters() {
        -0.0858417221300890,
        0.288387521185202;
   Q << 300*1, 0, 0, 0,
-       0, 300*320, 0, 0, 
+       0, 300*320, 0, 0,
        0, 0, 300*100, 0,
        0, 0, 0, 300*300;
   R << 500;
   mF = lqr(A, B, Q, R);
-  
+
   // ********************** Observer Dynamics
   mA_ << 0, 1, 0,
          0, 0, 1,

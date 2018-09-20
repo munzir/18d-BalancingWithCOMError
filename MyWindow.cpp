@@ -92,7 +92,7 @@ void MyWindow::drawWorld() const {
       (mController->mRobot->getPositions()).segment(3,3) \
       + Tf0.matrix().block<3, 3>(0, 0)*mLeftTargetPosition);
     mRI->drawEllipsoid(Eigen::Vector3d(0.05, 0.05, 0.05));
-    mRI->popMatrix();    
+    mRI->popMatrix();
 
     mRI->setPenColor(Eigen::Vector3d(0.0, 0.4, 0.2));
     mRI->pushMatrix();
@@ -100,14 +100,14 @@ void MyWindow::drawWorld() const {
       (mController->mRobot->getPositions()).segment(3,3) \
       + Tf0.matrix().block<3, 3>(0, 0)*mRightTargetPosition);
     mRI->drawEllipsoid(Eigen::Vector3d(0.05, 0.05, 0.05));
-    mRI->popMatrix();   
+    mRI->popMatrix();
 
     mRI->setPenColor(Eigen::Vector3d(0.2, 0.2, 0.8));
     mRI->pushMatrix();
     mRI->translate(mWorld->getSkeleton("krang")->getCOM());
     mRI->drawEllipsoid(Eigen::Vector3d(0.05, 0.05, 0.05));
-    mRI->popMatrix();    
-    
+    mRI->popMatrix();
+
 
   }
 
