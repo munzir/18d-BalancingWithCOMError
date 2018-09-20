@@ -106,6 +106,9 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
 
   // **************************** Data Output
   mOutFile.open("output.csv");
+
+  // *************************** Initialize LQR gain vector as zeros
+  mF = Eigen::VectorXd::Zero(4);
 }
 
 //=========================================================================
@@ -333,36 +336,36 @@ extern "C" void dgees_(const char* JOBVS, const char* SORT, selectFcn* SELECT, c
     const int* LWORK, logical* BWORK, int* INFO );
 
 // ==========================================================================
-Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eigen::Matrix<double, 4, 1>& B, Eigen::Matrix<double, 4, 4>& Q, Eigen::Matrix<double, 1, 1>& R) {
+bool Controller::lqr(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, Eigen::VectorXd& gain) {
 
-  Eigen::Matrix<double, 8, 8> H;
-  Eigen::MatrixXd M, dM, balM, sMat;
+  // Dimension
   int n, n2;
-  Eigen::Matrix<double, 4, 1> D;
-  Eigen::Matrix<double, 8, 1> s;
-  Eigen::Matrix<double, 4, 4> X1, X2, L, U, Xa, Xb, X;
-  Eigen::Matrix<double, 1, 4> gains;
+  n = A.rows();
+  n2 = 2*n;
+
+  Eigen::MatrixXd H(n2, n2);
+  Eigen::MatrixXd M, dM, balM, sMat;
+  Eigen::VectorXd D(n);
+  Eigen::VectorXd s(n2);
+  Eigen::MatrixXd X1(n,n), X2(n,n), L(n,n), U(n,n), Xa(n,n), Xb(n,n), X(n,n);
+  Eigen::VectorXd gains(n);
 
   // ================== Pre-Schur
   // Hamiltonian
   H << A, -B*R.inverse()*B.transpose(),
        -Q, -A.transpose();
 
-  // State dimension
-  n = A.rows();
-  n2 = 2*n;
-
   // balance H
   M = H;
   dM = M.diagonal().asDiagonal();
   balance_matrix(M-dM, balM, sMat);
-  for(int i=0; i<8; i++) s(i) = log2(sMat(i,i));
-  for(int i=0; i<4; i++) D(i) = round((-s(i) + s(i+4))/2.0);
-  for(int i=0; i<4; i++) {
+  for(int i=0; i<n2; i++) s(i) = log2(sMat(i,i));
+  for(int i=0; i<n; i++) D(i) = round((-s(i) + s(i+n))/2.0);
+  for(int i=0; i<n; i++) {
     s(i) = pow(2.0, D(i));
-    s(i+4) = pow(2.0, -D(i));
+    s(i+n) = pow(2.0, -D(i));
   }
-  D << s(0), s(1), s(2), s(3);
+  D = s.head(n);
   H = s.asDiagonal()*H*s.asDiagonal().inverse();
 
   // =================================== Schur
@@ -374,7 +377,7 @@ Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eige
   int SDIM;               // Number of eigenvalues (after sorting) for which SELECT is true
   double WR[n2], WI[n2];  // Real and imaginary parts of the computed eigenvalues in the same order
                           // that they appear on the diagonal of the output Schur form T
-  Eigen::Matrix<double, 8, 8> Z; // Contains the orthogonal matrix Z of Schur vectors
+  Eigen::MatrixXd Z(n2, n2); // Contains the orthogonal matrix Z of Schur vectors
 
   // The fixed part of the scratch space for dgees_ to do calculations
   logical BWORK[n2];
@@ -394,18 +397,18 @@ Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eige
 
   // ======================================== Post-Schur
   // finding solution X to riccati equation
-  X1 = Z.topLeftCorner(4 ,4);
-  X2 = Z.bottomLeftCorner(4 ,4);
-  Eigen::PartialPivLU<Eigen::Matrix<double, 4, 4>> lu(X1);
-  L = Eigen::Matrix<double, 4, 4>::Identity();
-  L.block<4,4>(0,0).triangularView<Eigen::StrictlyLower>() = lu.matrixLU();
+  X1 = Z.topLeftCorner(n ,n);
+  X2 = Z.bottomLeftCorner(n ,n);
+  Eigen::PartialPivLU<Eigen::MatrixXd> lu(X1);
+  L = Eigen::MatrixXd::Identity(n, n);
+  L.block(0,0,n,n).triangularView<Eigen::StrictlyLower>() = lu.matrixLU();
   U = lu.matrixLU().triangularView<Eigen::Upper>();
   Xa = ((X2*U.inverse())*L.inverse())*lu.permutationP();
   Xb = (Xa + Xa.transpose())/2.0;
   X = D.asDiagonal()*Xb*D.asDiagonal();
 
   // Controller gains
-  gains = R.inverse()*(B.transpose()*X);
+  gain << R.inverse()*(B.transpose()*X);
 
   if(mSteps == 1) {
     cout << "H:" << endl << H << endl << endl;
@@ -415,10 +418,10 @@ Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eige
     cout << "Xa:" << endl << Xa << endl << endl;
     cout << "Xb:" << endl << Xb << endl << endl;
     cout << "X:" << endl << X << endl << endl;
-    cout << "gains:" << endl << gains << endl << endl;
+    cout << "gains:" << endl << gain << endl << endl;
   }
 
-  return gains;
+  return true;
 }
 
 
@@ -527,7 +530,7 @@ void Controller::updateExtendedStateObserverParameters() {
        0, 0, 300*100, 0,
        0, 0, 0, 300*300;
   R << 500;
-  mF = lqr(A, B, Q, R);
+  lqr(A, B, Q, R, mF);
 
   // ********************** Observer Dynamics
   mA_ << 0, 1, 0,
