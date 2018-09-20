@@ -33,9 +33,10 @@
 #include <dart/utils/urdf/urdf.hpp>
 #include <iostream>
 #include <fstream>
-#include <nlopt.hpp>
 
 #include "MyWindow.hpp"
+#include "../18h-Util/balance.hpp"
+#include "../18h-Util/file_ops.hpp"
 
 using namespace std;
 using namespace dart::common;
@@ -43,56 +44,11 @@ using namespace dart::dynamics;
 using namespace dart::simulation;
 using namespace dart::math;
 
-struct comOptParams {
-  SkeletonPtr robot;
-  Eigen::Matrix<double, 24, 1> qInit;
-};
-
-double comOptFunc(const std::vector<double> &x, std::vector<double> &grad, void *my_func_data) {
-  comOptParams* optParams = reinterpret_cast<comOptParams *>(my_func_data);
-  Eigen::Matrix<double, 24, 1> q(x.data());
-
-  if (!grad.empty()) {
-    Eigen::Matrix<double, 24, 1> mGrad = q-optParams->qInit;
-    Eigen::VectorXd::Map(&grad[0], mGrad.size()) = mGrad;
-  }
-  return (0.5*pow((q-optParams->qInit).norm(), 2));
-}
-
-double comConstraint(const std::vector<double> &x, std::vector<double> &grad, void *com_const_data) {
-  comOptParams* optParams = reinterpret_cast<comOptParams *>(com_const_data);
-  Eigen::Matrix<double, 24, 1> q(x.data());
-  optParams->robot->setPositions(q);
-  return (pow(optParams->robot->getCOM()(0)-optParams->robot->getPosition(3), 2) \
-    + pow(optParams->robot->getCOM()(1)-optParams->robot->getPosition(4), 2));
-}
-
-double wheelAxisConstraint(const std::vector<double> &x, std::vector<double> &grad, void *wheelAxis_const_data) {
-  comOptParams* optParams = reinterpret_cast<comOptParams *>(wheelAxis_const_data);
-  Eigen::Matrix<double, 24, 1> q(x.data());
-  optParams->robot->setPositions(q);
-  return optParams->robot->getBodyNode(0)->getTransform().matrix()(2,0);
-}
-
-double headingConstraint(const std::vector<double> &x, std::vector<double> &grad, void *heading_const_data) {
-  comOptParams* optParams = reinterpret_cast<comOptParams *>(heading_const_data);
-  Eigen::Matrix<double, 24, 1> q(x.data());
-  optParams->robot->setPositions(q);
-  Eigen::Matrix<double, 4, 4> Tf = optParams->robot->getBodyNode(0)->getTransform().matrix();
-  double heading = atan2(Tf(0,0), -Tf(1,0));
-  optParams->robot->setPositions(optParams->qInit);
-  Tf = optParams->robot->getBodyNode(0)->getTransform().matrix();
-  double headingInit = atan2(Tf(0,0), -Tf(1,0));
-  return heading-headingInit;
-}
-
-
 dart::dynamics::SkeletonPtr createKrang() {
   // Load the Skeleton from a file
   dart::utils::DartLoader loader;
   dart::dynamics::SkeletonPtr krang =
       // INPUT on below line (Krang urdf file)
-      //loader.parseSkeleton("/home/panda/myfolder/wholebodycontrol/09-URDF/Krang/KrangOld.urdf");
       loader.parseSkeleton("/home/apatel435/Desktop/WholeBodyControlAttempt1/09-URDF/Krang/Krang.urdf");
   krang->setName("krang");
 
