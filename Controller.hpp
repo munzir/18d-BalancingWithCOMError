@@ -42,6 +42,8 @@
 #include <iostream>
 #include <fstream>
 
+#include "lqr.hpp"
+
 using namespace dart;
 using namespace std;
 using namespace config4cpp;
