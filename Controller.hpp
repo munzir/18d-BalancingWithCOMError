@@ -81,7 +81,7 @@ public:
   /// \brief Destructor
   virtual ~Controller();
 
-  Eigen::Matrix<double, 1, 4> lqr(Eigen::Matrix<double, 4, 4>& A, Eigen::Matrix<double, 4, 1>& B, Eigen::Matrix<double, 4, 4>& Q, Eigen::Matrix<double, 1, 1>& R);
+  bool lqr(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, Eigen::VectorXd& gain);
 
   void changeRobotParameters(dart::dynamics::SkeletonPtr robot, int bodyParams, double minXCOMError, double maxDeviation, double maxOffset);
 
@@ -158,7 +158,7 @@ public:
 
   // Observer Control
   double mu_thWheel, mu_thCOM;
-  Eigen::Matrix<double, 1, 4> mF;
+  Eigen::VectorXd mF;
 
   // Simulation sampling time
   double mdt;
