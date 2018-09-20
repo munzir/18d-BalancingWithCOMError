@@ -113,7 +113,6 @@ public:
   dart::dynamics::SkeletonPtr mRobot, mGuessRobot;
 
   /// \brief Control forces
-  //Eigen::Matrix<double, 19, 1> mForces;
   Eigen::Matrix<double, 18, 1> mForces;
 
   size_t mSteps;
@@ -129,22 +128,18 @@ public:
   Eigen::Vector3d mxyz0; // position of frame 0 in the world frame represented in the world frame
   double mpsi;
   double mqBody1;
-  //Eigen::Matrix<double, 18, 1> mqBody;
   Eigen::Matrix<double, 19, 1> mqBody;
   double mthWheel, mthCOM, mthCOM_true;
 
   Eigen::Matrix<double, 24, 1> mdq;
   Eigen::Vector3d mdxyz0;
   double mdx, mdqBody1, mdpsi;
-  //Eigen::Matrix<double, 18, 1> mdqBody;
   Eigen::Matrix<double, 17, 1> mdqBody;
-  //Eigen::Matrix<double, 20, 1> mdqMin;
   Eigen::Matrix<double, 19, 1> mdqMin;
   double mdthR, mdthL, mdthWheel, mdthCOM;
 
   Eigen::Matrix3d mRot0, mdRot0;
 
-  //Eigen::Matrix<double, 18, 1> mTauLim;
   Eigen::Matrix<double, 17, 1> mTauLim;
 
   bool maxTimeSet = 0;
