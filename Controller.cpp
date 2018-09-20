@@ -273,6 +273,163 @@ void Controller::initializeExtendedStateObservers() {
   mf_thCOM = 0.0;
 }
 
+// ==========================================================================
+void balance_matrix(const Eigen::MatrixXd &A, Eigen::MatrixXd &Aprime, Eigen::MatrixXd &D) {
+    // https://arxiv.org/pdf/1401.5766.pdf (Algorithm #3)
+    const int p = 2;
+    double beta = 2; // Radix base (2?)
+    Aprime = A;
+    D = Eigen::MatrixXd::Identity(A.rows(), A.cols());
+    bool converged = false;
+    do {
+        converged = true;
+        for (Eigen::Index i = 0; i < A.rows(); ++i) {
+            double c = Aprime.col(i).lpNorm<p>();
+            double r = Aprime.row(i).lpNorm<p>();
+            double s = pow(c, p) + pow(r, p);
+            double f = 1;
+            while (c < r / beta) {
+                c *= beta;
+                r /= beta;
+                f *= beta;
+            }
+            while (c >= r*beta) {
+                c /= beta;
+                r *= beta;
+                f /= beta;
+            }
+            if (pow(c, p) + pow(r, p) < 0.95*s) {
+                converged = false;
+                D(i, i) *= f;
+                Aprime.col(i) *= f;
+                Aprime.row(i) /= f;
+            }
+        }
+    } while (!converged);
+}
+
+// ==========================================================================
+// DGEES computes for an N-by-N real nonsymmetric matrix A, the
+// eigenvalues, the real Schur form T, and, optionally, the matrix of
+// Schur vectors Z.  This gives the Schur factorization A = Z*T*(Z**T).
+
+// Optionally, it also orders the eigenvalues on the diagonal of the
+// real Schur form so that selected eigenvalues are at the top left.
+// The leading columns of Z then form an orthonormal basis for the
+// invariant subspace corresponding to the selected eigenvalues.
+
+// A matrix is in real Schur form if it is upper quasi-triangular with
+// 1-by-1 and 2-by-2 blocks. 2-by-2 blocks will be standardized in the
+// form
+//         [  a  b  ]
+//         [  c  a  ]
+
+// where b*c < 0. The eigenvalues of such a block are a +- sqrt(bc).
+
+typedef long int logical; // logical is the return type of select function to be passed to dgees_
+typedef logical (selectFcn)(double *, double *); // function pointer type for select function
+logical select(double *wr, double *wi) {         // the function to be passed as select function
+  return (*wr < 0);
+}
+
+// C function declaration for the DGEES fortran function in lapack library
+// see link: http://eigen.tuxfamily.org/index.php?title=Lapack 
+// for a short tutorial describing how to do this
+extern "C" void dgees_(const char* JOBVS, const char* SORT, selectFcn* SELECT, const int* N, double* A, \
+    const int* LDA, int* SDIM, double* WR, double* WI, double* VS, const int* LDVS, double* WORK, \
+    const int* LWORK, logical* BWORK, int* INFO );
+
+// ==========================================================================
+Eigen::Matrix<double, 1, 4> Controller::lqr(Eigen::Matrix<double, 4, 4>& A, Eigen::Matrix<double, 4, 1>& B, Eigen::Matrix<double, 4, 4>& Q, Eigen::Matrix<double, 1, 1>& R) {
+  
+  Eigen::Matrix<double, 8, 8> H;
+  Eigen::MatrixXd M, dM, balM, sMat;
+  int n, n2;
+  Eigen::Matrix<double, 4, 1> D;
+  Eigen::Matrix<double, 8, 1> s;
+  Eigen::Matrix<double, 4, 4> X1, X2, L, U, Xa, Xb, X;
+  Eigen::Matrix<double, 1, 4> gains;
+
+  // ================== Pre-Schur
+  // Hamiltonian
+  H << A, -B*R.inverse()*B.transpose(),
+       -Q, -A.transpose();
+
+  // State dimension
+  n = A.rows();
+  n2 = 2*n;
+
+  // balance H
+  M = H;
+  dM = M.diagonal().asDiagonal();
+  balance_matrix(M-dM, balM, sMat);
+  for(int i=0; i<8; i++) s(i) = log2(sMat(i,i));
+  for(int i=0; i<4; i++) D(i) = round((-s(i) + s(i+4))/2.0); 
+  for(int i=0; i<4; i++) {
+    s(i) = pow(2.0, D(i));
+    s(i+4) = pow(2.0, -D(i));
+  }
+  D << s(0), s(1), s(2), s(3);
+  H = s.asDiagonal()*H*s.asDiagonal().inverse();
+
+  // =================================== Schur
+  // Input Arguments for dgees_ call
+  int LDA = H.outerStride();
+  int LDVS = n2;
+  
+  // Outputs of dgees_ call
+  int SDIM;               // Number of eigenvalues (after sorting) for which SELECT is true
+  double WR[n2], WI[n2];  // Real and imaginary parts of the computed eigenvalues in the same order 
+                          // that they appear on the diagonal of the output Schur form T
+  Eigen::Matrix<double, 8, 8> Z; // Contains the orthogonal matrix Z of Schur vectors
+  
+  // The fixed part of the scratch space for dgees_ to do calculations
+  logical BWORK[n2];
+
+  // Determine the optimal work size (size of the variable-sized scratch space for dgees_ to do its calculations)
+  double WORKDUMMY;
+  int LWORK = -1;
+  int INFO = 0;
+  dgees_("V", "S", select, &n2, H.data(), &LDA, &SDIM, &WR[0], &WI[0], Z.data(), &LDVS, \
+    &WORKDUMMY, &LWORK, &BWORK[0], &INFO );
+  LWORK = int(WORKDUMMY) + 32;
+  Eigen::VectorXd WORK(LWORK);
+
+  // dgees call for real schur decomposition along with ordering
+  dgees_("V", "S", select, &n2, H.data(), &LDA, &SDIM, &WR[0], &WI[0], Z.data(), &LDVS, \
+    WORK.data(), &LWORK, &BWORK[0], &INFO );
+
+  // ======================================== Post-Schur
+  // finding solution X to riccati equation 
+  X1 = Z.topLeftCorner(4 ,4);
+  X2 = Z.bottomLeftCorner(4 ,4);  
+  Eigen::PartialPivLU<Eigen::Matrix<double, 4, 4>> lu(X1);
+  L = Eigen::Matrix<double, 4, 4>::Identity();
+  L.block<4,4>(0,0).triangularView<Eigen::StrictlyLower>() = lu.matrixLU();
+  U = lu.matrixLU().triangularView<Eigen::Upper>();
+  Xa = ((X2*U.inverse())*L.inverse())*lu.permutationP();
+  Xb = (Xa + Xa.transpose())/2.0;
+  X = D.asDiagonal()*Xb*D.asDiagonal();
+
+  // Controller gains
+  gains = R.inverse()*(B.transpose()*X);
+
+  if(mSteps == 1) {
+    cout << "H:" << endl << H << endl << endl;
+    cout << "Z:" << endl << Z << endl << endl;
+    cout << "L:" << endl << L << endl << endl;
+    cout << "U:" << endl << U << endl << endl;
+    cout << "Xa:" << endl << Xa << endl << endl;
+    cout << "Xb:" << endl << Xb << endl << endl;
+    cout << "X:" << endl << X << endl << endl;
+    cout << "gains:" << endl << gains << endl << endl;
+  }
+
+  return gains;
+}
+
+
+// ==========================================================================
 void Controller::updateExtendedStateObserverParameters() {
 
   // ********************* Extracting Required Parameters from DART URDF
@@ -346,9 +503,10 @@ void Controller::updateExtendedStateObserverParameters() {
   c2 = M_g*r_w*l_g+M_g*pow(l_g,2)+I_yy;
 
   // ******************** Robot dynamics for LQR Gains (Not used)
-  Eigen::Matrix<double, 4, 4> A;
+  Eigen::Matrix<double, 4, 4> A, Q;
   Eigen::Matrix<double, 4, 1> B;
-
+  Eigen::Matrix<double, 1, 1> R; 
+  
   A << 0, 0, 1, 0,
        0, 0, 0, 1,
        ((M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, -c1*c_w/delta, c1*c_w/delta,
@@ -363,15 +521,21 @@ void Controller::updateExtendedStateObserverParameters() {
     cout << B << endl;
   }
 
-  // A << 0, 0, 1, 0,
-  //      0, 0, 0, 1,
-  //      17.7828531704201,  0, -0.00858417221300891,  0.00858417221300891,
-  //      47.8688365622367,  0, 0.0288387521185202,  -0.0288387521185202;
-  // B << 0,
-  //      0,
-  //      -0.0858417221300890,
-  //      0.288387521185202;
-
+  A << 0, 0, 1, 0,
+       0, 0, 0, 1,
+       17.7828531704201,  0, -0.00858417221300891,  0.00858417221300891,
+       47.8688365622367,  0, 0.0288387521185202,  -0.0288387521185202;
+  B << 0,
+       0,
+       -0.0858417221300890,
+       0.288387521185202;
+  Q << 300*1, 0, 0, 0,
+       0, 300*320, 0, 0, 
+       0, 0, 300*100, 0,
+       0, 0, 0, 300*300;
+  R << 500;
+  mF = lqr(A, B, Q, R);
+  
   // ********************** Observer Dynamics
   mA_ << 0, 1, 0,
          0, 0, 1,
@@ -422,7 +586,7 @@ void Controller::updateExtendedStateObserverStates() {
 double Controller::activeDisturbanceRejectionControl() {
 
   // ****************** The following F comes from Bodgan and Nathan's code
-  Eigen::Matrix<double, 4, 1> F;
+  // Eigen::Matrix<double, 4, 1> F;
   // F << -444.232838220247,   -13.8564064605507,   -111.681669536162,   -26.3837189119712;
   // F << -1848.03012979190,    -13.8564064605509,   -269.597433286135,   -18.3661533292315;
   // Working at 0 Tilt
@@ -444,14 +608,14 @@ double Controller::activeDisturbanceRejectionControl() {
   // F << -2669.67918242245,   -21.9089023002072,   -371.814613562732,   -28.2110280320200;
   // F << -2549.11511950484,   -21.9089023002060,   -368.094666786882,   -28.5125368751267;
   // F << -2443.80123228903,    0.0,   0.0,   0.0;
-  F << -953.5142, -13.8564, -330.9289, -29.5582; // By Munzir, based on A, B matrices calculated in updateESOParameters() function
+  // F << -953.5142, -13.8564, -330.9289, -29.5582; // By Munzir, based on A, B matrices calculated in updateESOParameters() function
 
 
   // Observer Control Gains
-  double F_thWheel = F(1);
-  double F_dthWheel = F(3);
-  double F_thCOM = F(0);
-  double F_dthCOM = F(2);
+  double F_thWheel = mF(1);
+  double F_dthWheel = mF(3);
+  double F_thCOM = mF(0);
+  double F_dthCOM = mF(2);
 
   // Observer Control Update
   mu_thWheel = -F_thWheel*(mthWheel_hat - 0) - F_dthWheel*(mdthWheel_hat - 0);

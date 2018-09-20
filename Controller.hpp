@@ -42,7 +42,6 @@
 #include <iostream>
 #include <fstream>
 
-
 using namespace dart;
 using namespace std;
 using namespace config4cpp;
@@ -79,6 +78,8 @@ public:
 
   /// \brief Destructor
   virtual ~Controller();
+
+  Eigen::Matrix<double, 1, 4> lqr(Eigen::Matrix<double, 4, 4>& A, Eigen::Matrix<double, 4, 1>& B, Eigen::Matrix<double, 4, 4>& Q, Eigen::Matrix<double, 1, 1>& R);
 
   void changeRobotParameters(dart::dynamics::SkeletonPtr robot, int bodyParams, double minXCOMError, double maxDeviation, double maxOffset);
 
@@ -160,6 +161,7 @@ public:
 
   // Observer Control
   double mu_thWheel, mu_thCOM;
+  Eigen::Matrix<double, 1, 4> mF;
 
   // Simulation sampling time
   double mdt;
