@@ -41,7 +41,7 @@
 #include <config4cpp/Configuration.h>
 #include <iostream>
 #include <fstream>
-
+#include "ESO.hpp"
 #include "lqr.hpp"
 
 using namespace dart;
@@ -91,11 +91,7 @@ public:
 
   void updateSpeeds();
 
-  void initializeExtendedStateObservers();
-
-  void updateExtendedStateObserverParameters();
-
-  void updateExtendedStateObserverStates();
+  void computeLinearizedDynamics();
 
   double activeDisturbanceRejectionControl();
 
@@ -123,7 +119,7 @@ public:
 
   filter *mdqFilt;
 
-  double mR, mL;
+  double mRadius, mL;
 
   Eigen::Matrix<double, 4, 4> mBaseTf;
   Eigen::Matrix<double, 24, 1> mq;
@@ -150,14 +146,14 @@ public:
   dart::simulation::World* mVirtualWorld;
 
   // Observer States
-  double mthWheel_hat, mdthWheel_hat, mf_thWheel, mthCOM_hat, mdthCOM_hat, mf_thCOM;
-
-  // Observer Parameters
-  Eigen::Matrix3d mA_;
-  Eigen::Vector3d mB_1, mB_2, mL_1, mL_2;
+  double mf_thWheel, mf_thCOM;
 
   // Observer Control
-  double mu_thWheel, mu_thCOM;
+  Eigen::VectorXd mB_thWheel, mB_thCOM;
+  Eigen::VectorXd mu_thWheel, mu_thCOM;
+
+  // LQR
+  Eigen::MatrixXd mA, mB, mQ, mR;
   Eigen::VectorXd mF;
 
   // Simulation sampling time
@@ -165,6 +161,10 @@ public:
 
   // For plotting purposes
   ofstream mOutFile;
+
+  // ESOs
+  ESO *mEthWheel;
+  ESO *mEthCOM;
 };
 
 #endif  // EXAMPLES_OPERATIONALSPACECONTROL_CONTROLLER_HPP_
