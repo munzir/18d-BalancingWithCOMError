@@ -129,8 +129,7 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
        0, 0, 300*100, 0,
        0, 0, 0, 300*300;
   mR << 500;
-  mF = Eigen::VectorXd::Zero(4);
-
+  
   // **************************** Torque Limits
   mTauLim << 120, 740, 370, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
 
@@ -385,23 +384,31 @@ void Controller::computeLinearizedDynamics(const dart::dynamics::SkeletonPtr rob
 // ==========================================================================
 
 // ==========================================================================
-double Controller::activeDisturbanceRejectionControl() {
+double Controller::activeDisturbanceRejectionControl( 
+  //inputs
+  const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, 
+  ESO* EthWheel, ESO* EthCOM, const Eigen::VectorXd& B_thWheel, const Eigen::VectorXd& B_thCOM, 
+  const Eigen::VectorXd& refState, //refState is (thCOM, thWheel, dthCOM, dthWheel) \
+  // outputs
+  Eigen::VectorXd& u_thWheel, Eigen::VectorXd& u_thCOM)
+{
 
   // LQR for controller gains
-  lqr(mA, mB, mQ, mR, mF);
+  Eigen::VectorXd F = Eigen::VectorXd::Zero(4);
+  lqr(A, B, Q, R, F);
   
   // Observer Control Gains
-  double F_thWheel = mF(1);
-  double F_dthWheel = mF(3);
-  double F_thCOM = mF(0);
-  double F_dthCOM = mF(2);
+  double F_thWheel = F(1);
+  double F_dthWheel = F(3);
+  double F_thCOM = F(0);
+  double F_dthCOM = F(2);
 
   // Observer Control Update
-  mu_thWheel(0) = -F_thWheel*(mEthWheel->getState()(0) - 0) - F_dthWheel*(mEthWheel->getState()(1) - 0);
-  mu_thCOM(0) = -F_thCOM*(mEthCOM->getState()(0) - 0) - F_dthCOM*(mEthCOM->getState()(1)- 0);
+  u_thWheel(0) = -F_thWheel*(EthWheel->getState()(0) - refState(1)) - F_dthWheel*(EthWheel->getState()(1) - refState(3));
+  u_thCOM(0) = -F_thCOM*(EthCOM->getState()(0) - refState(0)) - F_dthCOM*(EthCOM->getState()(1)- refState(2));
 
   // Active Disturbance Rejection Control
-  return mu_thWheel(0) + mu_thCOM(0) - mEthWheel->getState()(2)/mB_thWheel(1) - mEthCOM->getState()(2)/mB_thCOM(1);
+  return u_thWheel(0) + u_thCOM(0) - EthWheel->getState()(2)/B_thWheel(1) - EthCOM->getState()(2)/B_thCOM(1);
 }
 
 //=========================================================================
@@ -423,7 +430,8 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   
   // Apply the Control
   double wheelsTorque;
-  wheelsTorque = activeDisturbanceRejectionControl();
+  Eigen::VectorXd refState = Eigen::VectorXd::Zero(4);
+  wheelsTorque = activeDisturbanceRejectionControl(mA, mB, mQ, mR, mEthWheel, mEthCOM, mB_thWheel, mB_thCOM, refState, mu_thWheel, mu_thCOM);
   mForces(0) = 0.5*wheelsTorque;
   mForces(1) = 0.5*wheelsTorque;
   //const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
