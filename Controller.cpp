@@ -62,7 +62,7 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   mdqFilt = new filter(24, 100);
 
   // ************** Wheel Radius and Distance between wheels
-  mR = 0.25, mL = 0.68;
+  mRadius = 0.25, mL = 0.68;
 
   // *********************************** Tunable Parameters
   Configuration *  cfg = Configuration::create();
@@ -99,16 +99,43 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   mqBodyInit.tail(16) = qInit.tail(16);
 
   //*********************************** Initialize Extended State Observer
-  initializeExtendedStateObservers();
+  updatePositions();
+  updateSpeeds();
+  mthWheel = 0.0;
+
+  Eigen::Vector3d EthWheel_Init(0.0, 0.0, 0.0);
+  Eigen::Vector3d EthWheel_ObsGains(1159.99999999673, 173438.396407957, 1343839.4084839);
+  mEthWheel = (ESO*) new ESO(EthWheel_Init, EthWheel_ObsGains);
+  
+  mGuessRobot->setPositions(mRobot->getPositions());
+  Eigen::Vector3d COM = mRot0*(getBodyCOM(mGuessRobot)-mxyz0);
+  Eigen::Vector3d EthCOM_Init(atan2(COM(0), COM(2)), mdqBody1, 0.0);
+  Eigen::Vector3d EthCOM_ObsGains(1159.99999999673, 173438.396407957, 1343839.4084839);
+  mEthCOM = (ESO*) new ESO(EthCOM_Init, EthCOM_ObsGains);
+
+  mB_thWheel = Eigen::VectorXd::Zero(3);
+  mB_thCOM = Eigen::VectorXd::Zero(3);
+
+  mu_thWheel = Eigen::VectorXd::Zero(1);
+  mu_thCOM = Eigen::VectorXd::Zero(1);
+
+  //*********************************** LQR Parameters
+  mA = Eigen::MatrixXd::Zero(4, 4);
+  mB = Eigen::MatrixXd::Zero(4, 1);
+  mQ = Eigen::MatrixXd::Zero(4, 4);
+  mR = Eigen::MatrixXd::Zero(1, 1);;
+  mQ << 300*1, 0, 0, 0,
+       0, 300*320, 0, 0,
+       0, 0, 300*100, 0,
+       0, 0, 0, 300*300;
+  mR << 500;
+  mF = Eigen::VectorXd::Zero(4);
 
   // **************************** Torque Limits
   mTauLim << 120, 740, 370, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
 
   // **************************** Data Output
-  mOutFile.open("output.csv");
-
-  // *************************** Initialize LQR gain vector as zeros
-  mF = Eigen::VectorXd::Zero(4);
+  mOutFile.open("output.csv");  
 }
 
 //=========================================================================
@@ -252,181 +279,7 @@ void Controller::updateSpeeds(){
 }
 
 // ==========================================================================
-void Controller::initializeExtendedStateObservers() {
-
-  updatePositions();
-  updateSpeeds();
-
-  mthWheel = 0.0;
-  mthWheel_hat = 0.0;
-  mdthWheel_hat = 0.0;
-  mf_thWheel = 0.0;
-
-  mGuessRobot->setPositions(mRobot->getPositions());
-  Eigen::Vector3d COM = mRot0*(getBodyCOM(mGuessRobot)-mxyz0);
-  mthCOM_hat = atan2(COM(0), COM(2));
-  mdthCOM_hat = mdqBody1;
-  mf_thCOM = 0.0;
-}
-
-// ==========================================================================
-//void balance_matrix(const Eigen::MatrixXd &A, Eigen::MatrixXd &Aprime, Eigen::MatrixXd &D) {
-//    // https://arxiv.org/pdf/1401.5766.pdf (Algorithm #3)
-//    const int p = 2;
-//    double beta = 2; // Radix base (2?)
-//    Aprime = A;
-//    D = Eigen::MatrixXd::Identity(A.rows(), A.cols());
-//    bool converged = false;
-//    do {
-//        converged = true;
-//        for (Eigen::Index i = 0; i < A.rows(); ++i) {
-//            double c = Aprime.col(i).lpNorm<p>();
-//            double r = Aprime.row(i).lpNorm<p>();
-//            double s = pow(c, p) + pow(r, p);
-//            double f = 1;
-//            while (c < r / beta) {
-//                c *= beta;
-//                r /= beta;
-//                f *= beta;
-//            }
-//            while (c >= r*beta) {
-//                c /= beta;
-//                r *= beta;
-//                f /= beta;
-//            }
-//            if (pow(c, p) + pow(r, p) < 0.95*s) {
-//                converged = false;
-//                D(i, i) *= f;
-//                Aprime.col(i) *= f;
-//                Aprime.row(i) /= f;
-//            }
-//        }
-//    } while (!converged);
-//}
-//
-//// ==========================================================================
-//// DGEES computes for an N-by-N real nonsymmetric matrix A, the
-//// eigenvalues, the real Schur form T, and, optionally, the matrix of
-//// Schur vectors Z.  This gives the Schur factorization A = Z*T*(Z**T).
-//
-//// Optionally, it also orders the eigenvalues on the diagonal of the
-//// real Schur form so that selected eigenvalues are at the top left.
-//// The leading columns of Z then form an orthonormal basis for the
-//// invariant subspace corresponding to the selected eigenvalues.
-//
-//// A matrix is in real Schur form if it is upper quasi-triangular with
-//// 1-by-1 and 2-by-2 blocks. 2-by-2 blocks will be standardized in the
-//// form
-////         [  a  b  ]
-////         [  c  a  ]
-//
-//// where b*c < 0. The eigenvalues of such a block are a +- sqrt(bc).
-//
-//typedef long int logical; // logical is the return type of select function to be passed to dgees_
-//typedef logical (selectFcn)(double *, double *); // function pointer type for select function
-//logical select(double *wr, double *wi) {         // the function to be passed as select function
-//  return (*wr < 0);
-//}
-//
-//// C function declaration for the DGEES fortran function in lapack library
-//// see link: http://eigen.tuxfamily.org/index.php?title=Lapack
-//// for a short tutorial describing how to do this
-//extern "C" void dgees_(const char* JOBVS, const char* SORT, selectFcn* SELECT, const int* N, double* A, \
-//    const int* LDA, int* SDIM, double* WR, double* WI, double* VS, const int* LDVS, double* WORK, \
-//    const int* LWORK, logical* BWORK, int* INFO );
-//
-// ==========================================================================
-//bool Controller::lqr(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, Eigen::VectorXd& gain) {
-//
-//  // Dimension
-//  int n, n2;
-//  n = A.rows();
-//  n2 = 2*n;
-//
-//  Eigen::MatrixXd H(n2, n2);
-//  Eigen::MatrixXd M, dM, balM, sMat;
-//  Eigen::VectorXd D(n);
-//  Eigen::VectorXd s(n2);
-//  Eigen::MatrixXd X1(n,n), X2(n,n), L(n,n), U(n,n), Xa(n,n), Xb(n,n), X(n,n);
-//  Eigen::VectorXd gains(n);
-//
-//  // ================== Pre-Schur
-//  // Hamiltonian
-//  H << A, -B*R.inverse()*B.transpose(),
-//       -Q, -A.transpose();
-//
-//  // balance H
-//  M = H;
-//  dM = M.diagonal().asDiagonal();
-//  balance_matrix(M-dM, balM, sMat);
-//  for(int i=0; i<n2; i++) s(i) = log2(sMat(i,i));
-//  for(int i=0; i<n; i++) D(i) = round((-s(i) + s(i+n))/2.0);
-//  for(int i=0; i<n; i++) {
-//    s(i) = pow(2.0, D(i));
-//    s(i+n) = pow(2.0, -D(i));
-//  }
-//  D = s.head(n);
-//  H = s.asDiagonal()*H*s.asDiagonal().inverse();
-//
-//  // =================================== Schur
-//  // Input Arguments for dgees_ call
-//  int LDA = H.outerStride();
-//  int LDVS = n2;
-//
-//  // Outputs of dgees_ call
-//  int SDIM;               // Number of eigenvalues (after sorting) for which SELECT is true
-//  double WR[n2], WI[n2];  // Real and imaginary parts of the computed eigenvalues in the same order
-//                          // that they appear on the diagonal of the output Schur form T
-//  Eigen::MatrixXd Z(n2, n2); // Contains the orthogonal matrix Z of Schur vectors
-//
-//  // The fixed part of the scratch space for dgees_ to do calculations
-//  logical BWORK[n2];
-//
-//  // Determine the optimal work size (size of the variable-sized scratch space for dgees_ to do its calculations)
-//  double WORKDUMMY;
-//  int LWORK = -1;
-//  int INFO = 0;
-//  dgees_("V", "S", select, &n2, H.data(), &LDA, &SDIM, &WR[0], &WI[0], Z.data(), &LDVS, \
-//    &WORKDUMMY, &LWORK, &BWORK[0], &INFO );
-//  LWORK = int(WORKDUMMY) + 32;
-//  Eigen::VectorXd WORK(LWORK);
-//
-//  // dgees call for real schur decomposition along with ordering
-//  dgees_("V", "S", select, &n2, H.data(), &LDA, &SDIM, &WR[0], &WI[0], Z.data(), &LDVS, \
-//    WORK.data(), &LWORK, &BWORK[0], &INFO );
-//
-//  // ======================================== Post-Schur
-//  // finding solution X to riccati equation
-//  X1 = Z.topLeftCorner(n ,n);
-//  X2 = Z.bottomLeftCorner(n ,n);
-//  Eigen::PartialPivLU<Eigen::MatrixXd> lu(X1);
-//  L = Eigen::MatrixXd::Identity(n, n);
-//  L.block(0,0,n,n).triangularView<Eigen::StrictlyLower>() = lu.matrixLU();
-//  U = lu.matrixLU().triangularView<Eigen::Upper>();
-//  Xa = ((X2*U.inverse())*L.inverse())*lu.permutationP();
-//  Xb = (Xa + Xa.transpose())/2.0;
-//  X = D.asDiagonal()*Xb*D.asDiagonal();
-//
-//  // Controller gains
-//  gain << R.inverse()*(B.transpose()*X);
-//
-//  if(mSteps == 1) {
-//    cout << "H:" << endl << H << endl << endl;
-//    cout << "Z:" << endl << Z << endl << endl;
-//    cout << "L:" << endl << L << endl << endl;
-//    cout << "U:" << endl << U << endl << endl;
-//    cout << "Xa:" << endl << Xa << endl << endl;
-//    cout << "Xb:" << endl << Xb << endl << endl;
-//    cout << "X:" << endl << X << endl << endl;
-//    cout << "gains:" << endl << gain << endl << endl;
-//  }
-//
-//  return true;
-//}
-
-
-// ==========================================================================
-void Controller::updateExtendedStateObserverParameters() {
+void Controller::computeLinearizedDynamics() {
 
   // ********************* Extracting Required Parameters from DART URDF
 
@@ -435,7 +288,7 @@ void Controller::updateExtendedStateObserverParameters() {
   double gamma = 1.0;
   double g = 9.81;
   double c_w = 0.1;
-  double r_w = mR;
+  double r_w = mRadius;
   double m_w;
   double I_wa;
   double M_g;
@@ -503,12 +356,12 @@ void Controller::updateExtendedStateObserverParameters() {
   Eigen::Matrix<double, 4, 1> B;
   Eigen::Matrix<double, 1, 1> R;
 
-  A << 0, 0, 1, 0,
+  mA << 0, 0, 1, 0,
        0, 0, 0, 1,
        ((M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, -c1*c_w/delta, c1*c_w/delta,
        (M_g*r_w*l_g-I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, c2*c_w/delta, -c2*c_w/delta;
 
-  B << 0,
+  mB << 0,
        0,
        -c1/delta,
        c2/delta;
@@ -517,96 +370,23 @@ void Controller::updateExtendedStateObserverParameters() {
     cout << B << endl;
   }
 
-  A << 0, 0, 1, 0,
-       0, 0, 0, 1,
-       17.7828531704201,  0, -0.00858417221300891,  0.00858417221300891,
-       47.8688365622367,  0, 0.0288387521185202,  -0.0288387521185202;
-  B << 0,
-       0,
-       -0.0858417221300890,
-       0.288387521185202;
-  Q << 300*1, 0, 0, 0,
-       0, 300*320, 0, 0,
-       0, 0, 300*100, 0,
-       0, 0, 0, 300*300;
-  R << 500;
-  lqr(A, B, Q, R, mF);
-
   // ********************** Observer Dynamics
-  mA_ << 0, 1, 0,
-         0, 0, 1,
-         0, 0, 0;
-  mB_1 << 0,
+  mB_thWheel << 0,
          c2/delta,
          0;
-  mB_2 << 0,
+  mB_thCOM << 0,
          -c1/delta,
          0;
-  // mB_1 << 0,
-  //        0.288387521185202,
-  //        0;
-  // mB_2 << 0,
-  //        -0.0858417221300890,
-  //        0;
-
-
-  // ***************** Observer Feedback Gains
-  // mL_1 << 1760.00000000439,
-  //        269438.396409193,
-  //        21501434.2537036;
-  // mL_2 << 1760.00000000439,
-  //        269438.396409193,
-  //        21501434.2537036;
-
-  mL_1 << 1159.99999999673,173438.396407957,1343839.4084839;
-  mL_2 = mL_1;
 }
 
 // ==========================================================================
-void Controller::updateExtendedStateObserverStates() {
-
-  // Integrate Dynamics
-  // mA_, mL_1, mB_1, mL_2, mB_2;
-  Eigen::Vector3d x, xdot;
-
-  x << mthWheel_hat, mdthWheel_hat, mf_thWheel;
-  xdot = mA_*x + mL_1*(mthWheel - mthWheel_hat) + mB_1*mu_thWheel;
-  x += xdot*mdt; mthWheel_hat = x(0); mdthWheel_hat = x(1); mf_thWheel = x(2);
-
-  x << mthCOM_hat, mdthCOM_hat, mf_thCOM;
-  xdot = mA_*x + mL_2*(mthCOM - mthCOM_hat) + mB_2*mu_thCOM;
-  x += xdot*mdt; mthCOM_hat = x(0); mdthCOM_hat = x(1); mf_thCOM = x(2);
-}
 
 // ==========================================================================
 double Controller::activeDisturbanceRejectionControl() {
 
-  // ****************** The following F comes from Bodgan and Nathan's code
-  // Eigen::Matrix<double, 4, 1> F;
-  // F << -444.232838220247,   -13.8564064605507,   -111.681669536162,   -26.3837189119712;
-  // F << -1848.03012979190,    -13.8564064605509,   -269.597433286135,   -18.3661533292315;
-  // Working at 0 Tilt
-  // F << -2443.80123228903,    -21.9089023002056,   -366.198685841371,   -28.8559866982220;
-  // F << -500, -20, -400, -30;
-  // Break Dance Moves
-  // F << -510.449550243191,  -0.244948974282393,  -110.528023245082, -1.14116859943037;
-  // F << -502.507542429414, -0.182574185839181,  -109.159318118851, -0.994601287695807;
-  // Indefinite Drift
-  // F << -504.249727091444,  -0.199999999999294,  -109.459542459413, -1.02733232811016;
-  // F << -504.249793519900, -0.200000000000233,  -109.459675610606, -1.02733243214781;
-  // Explodes ???
-  // F << -505.168127552260,  -0.200000000003292,  -109.618042362170, -1.04301620674174;
-  // F << -500.481166823486,  -0.173205080751090,  -108.809840324047, -0.958459823947375;
-  // GOOD
-  // F << -500.4811784741, -0.1732050808, -108.8098652890, -0.9584598411;
-  // F << -3617.30655560822,    -69.2820323027686,   -676.022987559394,   -95.4128736402033;
-  // F << -6802.85419804756, -69.2820323027654,   -928.328202601923,   -86.9485793475169;
-  // F << -2669.67918242245,   -21.9089023002072,   -371.814613562732,   -28.2110280320200;
-  // F << -2549.11511950484,   -21.9089023002060,   -368.094666786882,   -28.5125368751267;
-  // F << -2443.80123228903,    0.0,   0.0,   0.0;
-  // F << -953.5142, -13.8564, -330.9289, -29.5582; // By Munzir, based on A, B matrices calculated in updateESOParameters() function
-
-
+  // LQR for controller gains
+  lqr(mA, mB, mQ, mR, mF);
+  
   // Observer Control Gains
   double F_thWheel = mF(1);
   double F_dthWheel = mF(3);
@@ -614,22 +394,11 @@ double Controller::activeDisturbanceRejectionControl() {
   double F_dthCOM = mF(2);
 
   // Observer Control Update
-  mu_thWheel = -F_thWheel*(mthWheel_hat - 0) - F_dthWheel*(mdthWheel_hat - 0);
-  mu_thCOM = -F_thCOM*(mthCOM_hat - 0) - F_dthCOM*(mdthCOM_hat - 0);
+  mu_thWheel(0) = -F_thWheel*(mEthWheel->getState()(0) - 0) - F_dthWheel*(mEthWheel->getState()(1) - 0);
+  mu_thCOM(0) = -F_thCOM*(mEthCOM->getState()(0) - 0) - F_dthCOM*(mEthCOM->getState()(1)- 0);
 
   // Active Disturbance Rejection Control
-  return mu_thWheel + mu_thCOM - mf_thWheel/mB_1(1) - mf_thCOM/mB_2(1);
-
-  // Simple LQR
-  // Eigen::VectorXd ut1(2); ut1 << F[1], F[3];
-  // Eigen::VectorXd ut2(2); ut2 << xFull[1]-xDesired[1], xFull[3]-xDesired[3];
-  // Eigen::VectorXd up1(2); up1 << F[0], F[2];
-  // Eigen::VectorXd up2(2); up2 << xFull[0]-xDesired[0], xFull[2]-xDesired[2];
-  // u_theta = -ut1.transpose()*ut2;
-  // u_psi = -up1.transpose()*up2;
-  // tau_w = u_psi + u_theta;
-  // tauL = 0.5*tau_w;
-  // tauR = 0.5*tau_w;
+  return mu_thWheel(0) + mu_thCOM(0) - mEthWheel->getState()(2)/mB_thWheel(1) - mEthCOM->getState()(2)/mB_thCOM(1);
 }
 
 //=========================================================================
@@ -646,6 +415,9 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   // Needs mRobot, mdqFilt, mBaseTf, mqBody1
   updateSpeeds();
 
+  // compute linearized dynamics
+  computeLinearizedDynamics();
+  
   // Apply the Control
   double wheelsTorque;
   wheelsTorque = activeDisturbanceRejectionControl();
@@ -656,9 +428,9 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   mRobot->setForces(index, mForces);
 
   // Update Extended State Observer
-  updateExtendedStateObserverParameters();
-  updateExtendedStateObserverStates();
-
+  mEthWheel->update(mthWheel, mB_thWheel, mu_thWheel, mdt);
+  mEthCOM->update(mthCOM, mB_thCOM, mu_thCOM, mdt);
+  
   // Dump data
   mOutFile << mthCOM_true << ", " << mthCOM << endl;
 }

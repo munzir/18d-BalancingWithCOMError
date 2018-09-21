@@ -159,7 +159,10 @@ bool lqr(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::Matrix
     X = D.asDiagonal()*Xb*D.asDiagonal();
 
     // Controller gains
-    K << R.inverse()*(B.transpose()*X);
+    K << (R.inverse()*(B.transpose()*X)).transpose();
+    //K << (X.transpose()*B)*R.inverse();
+
+    
 
     return true;
 }
