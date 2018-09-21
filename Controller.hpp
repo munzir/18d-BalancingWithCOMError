@@ -39,6 +39,7 @@
 #include "ESO.hpp"
 #include "lqr.hpp"
 #include "../18h-Util/convert_pose_formats.hpp"
+#include "../18h-Util/random.hpp"
 
 using namespace dart;
 using namespace dart::dynamics;
