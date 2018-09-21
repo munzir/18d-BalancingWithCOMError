@@ -16,7 +16,8 @@ file(GLOB srcs "Main.cpp"
     "../18h-Util/collision.cpp" "../18h-Util/collision.hpp"
     "../18h-Util/convert_pose_formats.cpp"
     "../18h-Util/convert_pose_formats.hpp"
-    "../18h-Util/file_ops.cpp" "../18h-Util/file_ops.hpp")
+    "../18h-Util/file_ops.cpp" "../18h-Util/file_ops.hpp"
+    "../18h-Util/random.cpp" "../18h-Util/random.hpp")
 add_executable(${PROJECT_NAME} ${srcs})
 
 target_link_libraries(${PROJECT_NAME} ${DART_LIBRARIES} nlopt config4cpp lapack)
