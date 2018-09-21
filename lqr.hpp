@@ -13,17 +13,18 @@
  * @brief Computes the LQR gain matrix (usually denoted K) for a discrete time
  * infinite horizon problem.
  *
- * @param a State matrix of the underlying system
- * @param b Input matrix of the underlying system
- * @param q Weight matrix penalizing the state
- * @param r Weight matrix penalizing the controls
- * @param n Weight matrix penalizing state / control pairs
- * @param k Pointer to the generated matrix (has to be a double/dynamic size
+ * @param A State matrix of the underlying system
+ * @param B Input matrix of the underlying system
+ * @param Q Weight matrix penalizing the state
+ * @param R Weight matrix penalizing the controls
+ * @param N Weight matrix penalizing state / control pairs
+ * @param K Pointer to the generated matrix (has to be a double/dynamic size
  * matrix!)
  */
 
-// // LQR Method (without n)
-bool lqr(Eigen::MatrixXd a, Eigen::MatrixXd b, Eigen::MatrixXd q, Eigen::MatrixXd r, Eigen::MatrixXd *k);
-
+// TODO
 // // LQR Method (full)
-bool lqr(Eigen::MatrixXd a, Eigen::MatrixXd b, Eigen::MatrixXd q, Eigen::MatrixXd r, Eigen::MatrixXd n, Eigen::MatrixXd *k);
+//bool lqr(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, const Eigen::MatrixXd& N, Eigen::MatrixXd& K);
+
+// // LQR Method (without n)
+bool lqr(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, Eigen::VectorXd& K);
