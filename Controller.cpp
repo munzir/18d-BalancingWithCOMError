@@ -31,9 +31,8 @@
 
 #include "Controller.hpp"
 
-
 //==========================================================================
-Controller::Controller(dart::dynamics::SkeletonPtr _robot)
+Controller::Controller(SkeletonPtr _robot)
   : mRobot(_robot)
    {
   assert(_robot != nullptr);
@@ -46,7 +45,7 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   // *************** Initialize Guess Robot
   mGuessRobot = mRobot->clone();
   mGuessRobot->setName("GuessRobot");
-  mVirtualWorld = new dart::simulation::World;
+  mVirtualWorld = new World;
   mVirtualWorld->addSkeleton(mGuessRobot);
   mGuessRobot->setPositions(mRobot->getPositions());
 
@@ -56,8 +55,8 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   // ************** Lock joints
   int joints = mRobot->getNumJoints();
   for(int i=3; i < joints; i++) {
-    mRobot->getJoint(i)->setActuatorType(dart::dynamics::Joint::ActuatorType::LOCKED);
-    mGuessRobot->getJoint(i)->setActuatorType(dart::dynamics::Joint::ActuatorType::LOCKED);
+    mRobot->getJoint(i)->setActuatorType(Joint::ActuatorType::LOCKED);
+    mGuessRobot->getJoint(i)->setActuatorType(Joint::ActuatorType::LOCKED);
   }
   mdqFilt = new filter(24, 100);
 
@@ -106,7 +105,7 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   Eigen::Vector3d EthWheel_Init(0.0, 0.0, 0.0);
   Eigen::Vector3d EthWheel_ObsGains(1159.99999999673, 173438.396407957, 1343839.4084839);
   mEthWheel = (ESO*) new ESO(EthWheel_Init, EthWheel_ObsGains);
-  
+
   mGuessRobot->setPositions(mRobot->getPositions());
   Eigen::Vector3d COM = mRot0*(getBodyCOM(mGuessRobot)-mxyz0);
   Eigen::Vector3d EthCOM_Init(atan2(COM(0), COM(2)), mdqBody1, 0.0);
@@ -134,7 +133,7 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot)
   mTauLim << 120, 740, 370, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
 
   // **************************** Data Output
-  mOutFile.open("output.csv");  
+  mOutFile.open("output.csv");
 }
 
 //=========================================================================
@@ -146,50 +145,34 @@ Controller::~Controller() {
 void printMatrix(Eigen::MatrixXd A){
   for(int i=0; i<A.rows(); i++){
     for(int j=0; j<A.cols(); j++){
-      std::cout << A(i,j) << ", ";
+      cout << A(i,j) << ", ";
     }
-    std::cout << std::endl;
+    cout << endl;
   }
-  std::cout << std::endl;
+  cout << endl;
 }
 
 // ==========================================================================
-dart::dynamics::SkeletonPtr Controller::qBody1Change(dart::dynamics::SkeletonPtr robot, double change) {
+SkeletonPtr Controller::qBody1Change(SkeletonPtr robot, double change) {
 
-  // Get qBody1
-  Eigen::Matrix<double, 4, 4> baseTf = robot->getBodyNode(0)->getTransform().matrix();
-  double psi =  atan2(baseTf(0,0), -baseTf(1,0));
-  double qBody1 = atan2(baseTf(0,1)*cos(psi) + baseTf(1,1)*sin(psi), baseTf(2,1));
+    Eigen::MatrixXd q = dartToMunzir(robot->getPositions(), robot);
 
-  // Change qBody1
-  qBody1 += change;
+    // Change qBody1
+    q(1, 0) += change;
 
-  // Convert qBody1 to axis angle
-  Eigen::Transform<double, 3, Eigen::Affine> newBaseTf = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
-  newBaseTf.prerotate(Eigen::AngleAxisd(-qBody1, Eigen::Vector3d::UnitX())).prerotate(Eigen::AngleAxisd(-M_PI/2+psi,Eigen::Vector3d::UnitY())).prerotate(Eigen::AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()));
-  Eigen::AngleAxisd aa(newBaseTf.matrix().block<3,3>(0,0));
+    // Assign new pose to robot
+    robot->setPositions(munzirToDart(q.transpose()));
 
-  // Set the axis angle as new robot position
-  Eigen::VectorXd q = robot->getPositions();
-  q.head(3) = aa.angle()*aa.axis();
-  robot->setPositions(q);
-
-  return robot;
+    return robot;
 }
 
 // ==========================================================================
-double fRand(double fMin, double fMax) {
-    double f = (double)rand() / RAND_MAX;
-    return fMin + f * (fMax - fMin);
-}
+void Controller::changeRobotParameters(SkeletonPtr robot, int bodyParams, double minXCOMError, double maxDeviation, double maxOffset) {
 
-// ==========================================================================
-void Controller::changeRobotParameters(dart::dynamics::SkeletonPtr robot, int bodyParams, double minXCOMError, double maxDeviation, double maxOffset) {
-
-  dart::dynamics::SkeletonPtr originalRobot = robot->clone();
+  SkeletonPtr originalRobot = robot->clone();
 
   int numBodies = robot->getNumBodyNodes();
-  dart::dynamics::BodyNodePtr bodyi;
+  BodyNodePtr bodyi;
   double mi, pert_mi;
   double mxi, pert_mxi;
   double myi, pert_myi;
@@ -229,7 +212,7 @@ void Controller::changeRobotParameters(dart::dynamics::SkeletonPtr robot, int bo
   }
 }
 // ==========================================================================
-Eigen::Vector3d Controller::getBodyCOM(dart::dynamics::SkeletonPtr robot) {
+Eigen::Vector3d Controller::getBodyCOM(SkeletonPtr robot) {
   double fullMass = robot->getMass();
   double wheelMass = robot->getBodyNode("LWheel")->getMass();
   return (fullMass*robot->getCOM() - wheelMass*robot->getBodyNode("LWheel")->getCOM() - wheelMass*robot->getBodyNode("RWheel")->getCOM())/(fullMass - 2*wheelMass);
@@ -281,7 +264,7 @@ void Controller::updateSpeeds(){
 void Controller::computeLinearizedDynamics(const dart::dynamics::SkeletonPtr robot, \
   Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::VectorXd& B_thWheel, Eigen::VectorXd& B_thCOM) {
 
-  
+
   // ********************* Extracting Required Parameters from DART URDF
 
   // Get Rot0, xyz0
@@ -298,7 +281,7 @@ void Controller::computeLinearizedDynamics(const dart::dynamics::SkeletonPtr rob
   double gamma = 1.0;
   double g = 9.81;
   double c_w = 0.1;
-  double r_w = 0.25; 
+  double r_w = 0.25;
   double m_w;
   double I_wa;
   double M_g;
@@ -361,7 +344,7 @@ void Controller::computeLinearizedDynamics(const dart::dynamics::SkeletonPtr rob
   c1 = (M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2)+M_g*r_w*l_g+I_ra*pow(gamma,2);
   c2 = M_g*r_w*l_g+M_g*pow(l_g,2)+I_yy;
 
-  // ******************** Robot dynamics for LQR Gains 
+  // ******************** Robot dynamics for LQR Gains
   A << 0, 0, 1, 0,
        0, 0, 0, 1,
        ((M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, -c1*c_w/delta, c1*c_w/delta,
@@ -427,7 +410,7 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
 
   // compute linearized dynamics
   computeLinearizedDynamics(mRobot, mA, mB, mB_thWheel, mB_thCOM);
-  
+
   // Apply the Control
   double wheelsTorque;
   Eigen::VectorXd refState = Eigen::VectorXd::Zero(4);
@@ -441,13 +424,13 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   // Update Extended State Observer
   mEthWheel->update(mthWheel, mB_thWheel, mu_thWheel, mdt);
   mEthCOM->update(mthCOM, mB_thCOM, mu_thCOM, mdt);
-  
+
   // Dump data
   mOutFile << mthCOM_true << ", " << mthCOM << endl;
 }
 
 //=========================================================================
-dart::dynamics::SkeletonPtr Controller::getRobot() const {
+SkeletonPtr Controller::getRobot() const {
   return mRobot;
 }
 

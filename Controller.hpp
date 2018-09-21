@@ -32,19 +32,18 @@
 #ifndef EXAMPLES_OPERATIONALSPACECONTROL_CONTROLLER_HPP_
 #define EXAMPLES_OPERATIONALSPACECONTROL_CONTROLLER_HPP_
 
-#include <Eigen/Eigen>
-#include <string>
 #include <dart/dart.hpp>
 #include <boost/circular_buffer.hpp>
-#include <nlopt.hpp>
-#include <string>
 #include <config4cpp/Configuration.h>
-#include <iostream>
-#include <fstream>
+
 #include "ESO.hpp"
 #include "lqr.hpp"
+#include "../18h-Util/convert_pose_formats.hpp"
+#include "../18h-Util/random.hpp"
 
 using namespace dart;
+using namespace dart::dynamics;
+using namespace dart::simulation;
 using namespace std;
 using namespace config4cpp;
 
@@ -85,7 +84,7 @@ public:
 
   void changeRobotParameters(dart::dynamics::SkeletonPtr robot, int bodyParams, double minXCOMError, double maxDeviation, double maxOffset);
 
-  dart::dynamics::SkeletonPtr qBody1Change(dart::dynamics::SkeletonPtr krang, double change);
+  SkeletonPtr qBody1Change(dart::dynamics::SkeletonPtr krang, double change);
 
   void updatePositions();
 
@@ -108,14 +107,14 @@ public:
   void update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::Vector3d& _RightTargetPosition);
 
   /// \brief Get robot
-  dart::dynamics::SkeletonPtr getRobot() const;
+  SkeletonPtr getRobot() const;
 
   /// \brief Keyboard control
   virtual void keyboard(unsigned char _key, int _x, int _y);
 
 //private:
   /// \brief Robot
-  dart::dynamics::SkeletonPtr mRobot, mGuessRobot;
+  SkeletonPtr mRobot, mGuessRobot;
 
   /// \brief Control forces
   Eigen::Matrix<double, 18, 1> mForces;
@@ -150,7 +149,7 @@ public:
   bool maxTimeSet = 0;
 
   double mInitialComAngle;
-  dart::simulation::World* mVirtualWorld;
+  World* mVirtualWorld;
 
   // Observer States
   double mf_thWheel, mf_thCOM;
