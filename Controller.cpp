@@ -30,11 +30,6 @@
  */
 
 #include "Controller.hpp"
-#include "../18h-Util/convert_pose_formats.hpp"
-
-using namespace std;
-using namespace dart::dynamics;
-using namespace dart::simulation;
 
 //==========================================================================
 Controller::Controller(SkeletonPtr _robot)
@@ -161,31 +156,15 @@ void printMatrix(Eigen::MatrixXd A){
 // ==========================================================================
 SkeletonPtr Controller::qBody1Change(SkeletonPtr robot, double change) {
 
-  // Get qBody1
-  Eigen::Matrix<double, 4, 4> baseTf = robot->getBodyNode(0)->getTransform().matrix();
-  double psi =  atan2(baseTf(0,0), -baseTf(1,0));
-  double qBody1 = atan2(baseTf(0,1)*cos(psi) + baseTf(1,1)*sin(psi), baseTf(2,1));
+    Eigen::MatrixXd q = dartToMunzir(robot->getPositions(), robot);
 
-  // Change qBody1
-  qBody1 += change;
+    // Change qBody1
+    q(1, 0) += change;
 
-  // Convert qBody1 to axis angle
-  Eigen::Transform<double, 3, Eigen::Affine> newBaseTf = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
-  newBaseTf.prerotate(Eigen::AngleAxisd(-qBody1, Eigen::Vector3d::UnitX())).prerotate(Eigen::AngleAxisd(-M_PI/2+psi,Eigen::Vector3d::UnitY())).prerotate(Eigen::AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()));
-  Eigen::AngleAxisd aa(newBaseTf.matrix().block<3,3>(0,0));
+    // Assign new pose to robot
+    robot->setPositions(munzirToDart(q.transpose()));
 
-  // Set the axis angle as new robot position
-  Eigen::VectorXd q = robot->getPositions();
-  q.head(3) = aa.angle()*aa.axis();
-  robot->setPositions(q);
-
-  return robot;
-}
-
-// ==========================================================================
-double fRand(double fMin, double fMax) {
-    double f = (double)rand() / RAND_MAX;
-    return fMin + f * (fMax - fMin);
+    return robot;
 }
 
 // ==========================================================================
