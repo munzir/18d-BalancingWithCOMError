@@ -94,7 +94,13 @@ public:
   void computeLinearizedDynamics(const dart::dynamics::SkeletonPtr robot, \
     Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::VectorXd& B_thWheel, Eigen::VectorXd& B_thCOM);
 
-  double activeDisturbanceRejectionControl();
+  double activeDisturbanceRejectionControl( \
+    //inputs
+    const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, 
+    ESO* EthWheel, ESO* EthCOM, const Eigen::VectorXd& B_thWheel, const Eigen::VectorXd& B_thCOM, 
+    const Eigen::VectorXd& refState, //refState is (thCOM, thWheel, dthCOM, dthWheel) \
+    // outputs 
+    Eigen::VectorXd& u_thWheel, Eigen::VectorXd& u_thCOM);
 
   Eigen::Vector3d getBodyCOM(dart::dynamics::SkeletonPtr robot);
 
@@ -155,7 +161,6 @@ public:
 
   // LQR
   Eigen::MatrixXd mA, mB, mQ, mR;
-  Eigen::VectorXd mF;
 
   // Simulation sampling time
   double mdt;
