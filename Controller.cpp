@@ -283,16 +283,27 @@ void Controller::updateSpeeds(){
 }
 
 // ==========================================================================
-void Controller::computeLinearizedDynamics() {
+void Controller::computeLinearizedDynamics(const dart::dynamics::SkeletonPtr robot, \
+  Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::VectorXd& B_thWheel, Eigen::VectorXd& B_thCOM) {
+
 
   // ********************* Extracting Required Parameters from DART URDF
+
+  // Get Rot0, xyz0
+  Eigen::Matrix<double, 4, 4> baseTf = robot->getBodyNode(0)->getTransform().matrix();
+  double psi =  atan2(baseTf(0,0), -baseTf(1,0));
+  Eigen::Matrix3d Rot0;
+  Rot0 << cos(psi), sin(psi), 0,
+          -sin(psi), cos(psi), 0,
+          0, 0, 1;
+  Eigen::Vector3d xyz0 = robot->getPositions().segment(3,3);
 
   // Wheeled Inverted Pendulum Parameters (symbols taken from the paper)
   double I_ra = 0;
   double gamma = 1.0;
   double g = 9.81;
   double c_w = 0.1;
-  double r_w = mRadius;
+  double r_w = 0.25;
   double m_w;
   double I_wa;
   double M_g;
@@ -314,29 +325,29 @@ void Controller::computeLinearizedDynamics() {
   double m;
 
   // Wheel Mass
-  m_w = mRobot->getBodyNode("LWheel")->getMass();
+  m_w = robot->getBodyNode("LWheel")->getMass();
 
   // Wheel inertia (axis)
-  mRobot->getBodyNode("LWheel")->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
+  robot->getBodyNode("LWheel")->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
   I_wa = ixx;
 
   // Body Mass
-  M_g = mRobot->getMass() - 2*m_w;
+  M_g = robot->getMass() - 2*m_w;
 
   // Distance to body COM
-  COM = mRot0*(getBodyCOM(mRobot) - mxyz0); COM(1) = 0;
+  COM = Rot0*(getBodyCOM(robot) - xyz0); COM(1) = 0;
   l_g = COM.norm();
 
   // Body inertia (axis)
-  nBodies = mRobot->getNumBodyNodes();
+  nBodies = robot->getNumBodyNodes();
   iBody = Eigen::Matrix3d::Zero();
-  baseFrame = mRobot->getBodyNode("Base");
+  baseFrame = robot->getBodyNode("Base");
   for(int i=0; i<nBodies; i++){
     if(i==1 || i==2) continue; // Skip wheels
-    b = mRobot->getBodyNode(i);
+    b = robot->getBodyNode(i);
     b->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
     rot = b->getTransform(baseFrame).rotation();
-    t = mRobot->getCOM(baseFrame) - b->getCOM(baseFrame) ; // Position vector from local COM to body COM expressed in base frame
+    t = robot->getCOM(baseFrame) - b->getCOM(baseFrame) ; // Position vector from local COM to body COM expressed in base frame
     m = b->getMass();
     iMat << ixx, ixy, ixz, // Inertia tensor of the body around its CoM expressed in body frame
             ixy, iyy, iyz,
@@ -355,30 +366,22 @@ void Controller::computeLinearizedDynamics() {
   c1 = (M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2)+M_g*r_w*l_g+I_ra*pow(gamma,2);
   c2 = M_g*r_w*l_g+M_g*pow(l_g,2)+I_yy;
 
-  // ******************** Robot dynamics for LQR Gains (Not used)
-  Eigen::Matrix<double, 4, 4> A, Q;
-  Eigen::Matrix<double, 4, 1> B;
-  Eigen::Matrix<double, 1, 1> R;
-
-  mA << 0, 0, 1, 0,
+  // ******************** Robot dynamics for LQR Gains
+  A << 0, 0, 1, 0,
        0, 0, 0, 1,
        ((M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, -c1*c_w/delta, c1*c_w/delta,
        (M_g*r_w*l_g-I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, c2*c_w/delta, -c2*c_w/delta;
 
-  mB << 0,
+  B << 0,
        0,
        -c1/delta,
        c2/delta;
-  if(mSteps == 1) {
-    cout << A << endl;
-    cout << B << endl;
-  }
 
   // ********************** Observer Dynamics
-  mB_thWheel << 0,
+  B_thWheel << 0,
          c2/delta,
          0;
-  mB_thCOM << 0,
+  B_thCOM << 0,
          -c1/delta,
          0;
 }
@@ -420,7 +423,7 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   updateSpeeds();
 
   // compute linearized dynamics
-  computeLinearizedDynamics();
+  computeLinearizedDynamics(mRobot, mA, mB, mB_thWheel, mB_thCOM);
 
   // Apply the Control
   double wheelsTorque;

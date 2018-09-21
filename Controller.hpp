@@ -89,7 +89,8 @@ public:
 
   void updateSpeeds();
 
-  void computeLinearizedDynamics();
+  void computeLinearizedDynamics(const dart::dynamics::SkeletonPtr robot, \
+    Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::VectorXd& B_thWheel, Eigen::VectorXd& B_thCOM);
 
   double activeDisturbanceRejectionControl();
 
