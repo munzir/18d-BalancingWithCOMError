@@ -36,10 +36,10 @@
 #include <boost/circular_buffer.hpp>
 #include <config4cpp/Configuration.h>
 
-#include "ESO.hpp"
-#include "lqr.hpp"
+#include "../18h-Util/lqr.hpp"
 #include "../18h-Util/convert_pose_formats.hpp"
 #include "../18h-Util/random.hpp"
+#include "../18h-Util/adrc.hpp"
 
 using namespace dart;
 using namespace dart::dynamics;
@@ -89,17 +89,6 @@ public:
   void updatePositions();
 
   void updateSpeeds();
-
-  void computeLinearizedDynamics(const dart::dynamics::SkeletonPtr robot, \
-    Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::VectorXd& B_thWheel, Eigen::VectorXd& B_thCOM);
-
-  double activeDisturbanceRejectionControl( \
-    //inputs
-    const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, 
-    ESO* EthWheel, ESO* EthCOM, const Eigen::VectorXd& B_thWheel, const Eigen::VectorXd& B_thCOM, 
-    const Eigen::VectorXd& refState, //refState is (thCOM, thWheel, dthCOM, dthWheel) \
-    // outputs 
-    Eigen::VectorXd& u_thWheel, Eigen::VectorXd& u_thCOM);
 
   Eigen::Vector3d getBodyCOM(dart::dynamics::SkeletonPtr robot);
 
