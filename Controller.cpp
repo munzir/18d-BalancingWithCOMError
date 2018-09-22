@@ -260,140 +260,6 @@ void Controller::updateSpeeds(){
   mdthCOM = mdqBody1;
 }
 
-// ==========================================================================
-void Controller::computeLinearizedDynamics(const dart::dynamics::SkeletonPtr robot, \
-  Eigen::MatrixXd& A, Eigen::MatrixXd& B, Eigen::VectorXd& B_thWheel, Eigen::VectorXd& B_thCOM) {
-
-
-  // ********************* Extracting Required Parameters from DART URDF
-
-  // Get Rot0, xyz0
-  Eigen::Matrix<double, 4, 4> baseTf = robot->getBodyNode(0)->getTransform().matrix();
-  double psi =  atan2(baseTf(0,0), -baseTf(1,0));
-  Eigen::Matrix3d Rot0;
-  Rot0 << cos(psi), sin(psi), 0,
-          -sin(psi), cos(psi), 0,
-          0, 0, 1;
-  Eigen::Vector3d xyz0 = robot->getPositions().segment(3,3);
-
-  // Wheeled Inverted Pendulum Parameters (symbols taken from the paper)
-  double I_ra = 0;
-  double gamma = 1.0;
-  double g = 9.81;
-  double c_w = 0.1;
-  double r_w = 0.25;
-  double m_w;
-  double I_wa;
-  double M_g;
-  double l_g;
-  double I_yy;
-  double delta, c1, c2; // Intermediate Parameters
-
-  // Our intermediate Variables
-  double ixx, iyy, izz, ixy, ixz, iyz;
-  Eigen::Vector3d COM;
-  int nBodies;
-  Eigen::Matrix3d iMat;
-  Eigen::Matrix3d iBody;
-  Eigen::Matrix3d rot;
-  Eigen::Vector3d t;
-  Eigen::Matrix3d tMat;
-  dart::dynamics::BodyNodePtr b;
-  dart::dynamics::Frame* baseFrame;
-  double m;
-
-  // Wheel Mass
-  m_w = robot->getBodyNode("LWheel")->getMass();
-
-  // Wheel inertia (axis)
-  robot->getBodyNode("LWheel")->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
-  I_wa = ixx;
-
-  // Body Mass
-  M_g = robot->getMass() - 2*m_w;
-
-  // Distance to body COM
-  COM = Rot0*(getBodyCOM(robot) - xyz0); COM(1) = 0;
-  l_g = COM.norm();
-
-  // Body inertia (axis)
-  nBodies = robot->getNumBodyNodes();
-  iBody = Eigen::Matrix3d::Zero();
-  baseFrame = robot->getBodyNode("Base");
-  for(int i=0; i<nBodies; i++){
-    if(i==1 || i==2) continue; // Skip wheels
-    b = robot->getBodyNode(i);
-    b->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
-    rot = b->getTransform(baseFrame).rotation();
-    t = robot->getCOM(baseFrame) - b->getCOM(baseFrame) ; // Position vector from local COM to body COM expressed in base frame
-    m = b->getMass();
-    iMat << ixx, ixy, ixz, // Inertia tensor of the body around its CoM expressed in body frame
-            ixy, iyy, iyz,
-            ixz, iyz, izz;
-    iMat = rot*iMat*rot.transpose(); // Inertia tensor of the body around its CoM expressed in base frame
-    tMat << (t(1)*t(1)+t(2)*t(2)), (-t(0)*t(1)),          (-t(0)*t(2)),
-            (-t(0)*t(1)),          (t(0)*t(0)+t(2)*t(2)), (-t(1)*t(2)),
-            (-t(0)*t(2)),          (-t(1)*t(2)),          (t(0)*t(0)+t(1)*t(1));
-    iMat = iMat + m*tMat; // Parallel Axis Theorem
-    iBody += iMat;
-  }
-  I_yy = iBody(0, 0);
-
-  // Intermediate Parameters
-  delta = (M_g*l_g+I_yy+pow(gamma,2)*I_ra)*(M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2)-pow(M_g*r_w*l_g-I_ra*pow(gamma,2),2);
-  c1 = (M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2)+M_g*r_w*l_g+I_ra*pow(gamma,2);
-  c2 = M_g*r_w*l_g+M_g*pow(l_g,2)+I_yy;
-
-  // ******************** Robot dynamics for LQR Gains
-  A << 0, 0, 1, 0,
-       0, 0, 0, 1,
-       ((M_g+m_w)*pow(r_w,2)+I_wa+I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, -c1*c_w/delta, c1*c_w/delta,
-       (M_g*r_w*l_g-I_ra*pow(gamma,2))*M_g*g*l_g/delta, 0, c2*c_w/delta, -c2*c_w/delta;
-
-  B << 0,
-       0,
-       -c1/delta,
-       c2/delta;
-
-  // ********************** Observer Dynamics
-  B_thWheel << 0,
-         c2/delta,
-         0;
-  B_thCOM << 0,
-         -c1/delta,
-         0;
-}
-
-// ==========================================================================
-
-// ==========================================================================
-double Controller::activeDisturbanceRejectionControl( 
-  //inputs
-  const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, 
-  ESO* EthWheel, ESO* EthCOM, const Eigen::VectorXd& B_thWheel, const Eigen::VectorXd& B_thCOM, 
-  const Eigen::VectorXd& refState, //refState is (thCOM, thWheel, dthCOM, dthWheel) \
-  // outputs
-  Eigen::VectorXd& u_thWheel, Eigen::VectorXd& u_thCOM)
-{
-
-  // LQR for controller gains
-  Eigen::VectorXd F = Eigen::VectorXd::Zero(4);
-  lqr(A, B, Q, R, F);
-  
-  // Observer Control Gains
-  double F_thWheel = F(1);
-  double F_dthWheel = F(3);
-  double F_thCOM = F(0);
-  double F_dthCOM = F(2);
-
-  // Observer Control Update
-  u_thWheel(0) = -F_thWheel*(EthWheel->getState()(0) - refState(1)) - F_dthWheel*(EthWheel->getState()(1) - refState(3));
-  u_thCOM(0) = -F_thCOM*(EthCOM->getState()(0) - refState(0)) - F_dthCOM*(EthCOM->getState()(1)- refState(2));
-
-  // Active Disturbance Rejection Control
-  return u_thWheel(0) + u_thCOM(0) - EthWheel->getState()(2)/B_thWheel(1) - EthCOM->getState()(2)/B_thCOM(1);
-}
-
 //=========================================================================
 void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::Vector3d& _RightTargetPosition) {
 
@@ -414,17 +280,17 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   // Apply the Control
   double wheelsTorque;
   Eigen::VectorXd refState = Eigen::VectorXd::Zero(4);
-  wheelsTorque = activeDisturbanceRejectionControl(mA, mB, mQ, mR, mEthWheel, mEthCOM, mB_thWheel, mB_thCOM, refState, mu_thWheel, mu_thCOM);
+  Eigen::VectorXd state = Eigen::VectorXd::Zero(4);
+  state << mthCOM, mdthCOM, mthWheel, mdthWheel;
+  activeDisturbanceRejectionControl(mA, mB, mQ, mR, mEthWheel, mEthCOM, mB_thWheel, mB_thCOM, state, refState, mdt, mu_thWheel, mu_thCOM);
+  wheelsTorque = mu_thCOM(0) + mu_thWheel(0);
   mForces(0) = 0.5*wheelsTorque;
   mForces(1) = 0.5*wheelsTorque;
   //const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
   const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
   mRobot->setForces(index, mForces);
 
-  // Update Extended State Observer
-  mEthWheel->update(mthWheel, mB_thWheel, mu_thWheel, mdt);
-  mEthCOM->update(mthCOM, mB_thCOM, mu_thCOM, mdt);
-
+  
   // Dump data
   mOutFile << mthCOM_true << ", " << mthCOM << endl;
 }
