@@ -6,7 +6,7 @@ This project attempts to balance the robot with an incorrect center of mass esti
 - LAPACK [LAPACK Homepage](www.netlib.org/lapack)
   * Note: on Ubuntu systems try:
 
-    sudo apt install liblapack-dev
+      sudo apt install liblapack-dev
 
 ### Build and Run
 1: Enter the repository
