@@ -38,7 +38,7 @@
 #include "Controller.hpp"
 
 /// \brief class MyWindow
-class MyWindow : public dart::gui::SimWindow
+class MyWindow : public dart::gui::glut::SimWindow
 {
 public:
   /// \brief Default constructor
