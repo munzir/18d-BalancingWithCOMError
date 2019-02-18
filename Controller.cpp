@@ -43,7 +43,7 @@ Controller::Controller(SkeletonPtr _robot)
   mdt = mRobot->getTimeStep();
 
   // *************** Initialize Guess Robot
-  mGuessRobot = mRobot->clone();
+  mGuessRobot = mRobot->cloneSkeleton();
   mGuessRobot->setName("GuessRobot");
   mVirtualWorld = new World;
   mVirtualWorld->addSkeleton(mGuessRobot);
@@ -128,7 +128,7 @@ Controller::Controller(SkeletonPtr _robot)
        0, 0, 300*100, 0,
        0, 0, 0, 300*300;
   mR << 500;
-  
+
   // **************************** Torque Limits
   mTauLim << 120, 740, 370, 370, 370, 175, 175, 40, 40, 9.5, 370, 370, 175, 175, 40, 40, 9.5;
 
@@ -169,7 +169,7 @@ SkeletonPtr Controller::qBody1Change(SkeletonPtr robot, double change) {
 // ==========================================================================
 void Controller::changeRobotParameters(SkeletonPtr robot, int bodyParams, double minXCOMError, double maxDeviation, double maxOffset) {
 
-  SkeletonPtr originalRobot = robot->clone();
+  SkeletonPtr originalRobot = robot->cloneSkeleton();
 
   int numBodies = robot->getNumBodyNodes();
   BodyNodePtr bodyi;
@@ -290,7 +290,7 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
   mRobot->setForces(index, mForces);
 
-  
+
   // Dump data
   mOutFile << mthCOM_true << ", " << mthCOM << endl;
 }
