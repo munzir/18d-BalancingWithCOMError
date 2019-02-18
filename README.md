@@ -4,9 +4,7 @@ This project attempts to balance the robot with an incorrect center of mass esti
 ### Dependencies
 - DART (at least version 6) [Dart Homepage](https://dartsim.github.io)
 - LAPACK [LAPACK Homepage](www.netlib.org/lapack)
-  * Note: on Ubuntu systems try:
-
-      sudo apt install liblapack-dev
+  * On Ubuntu systems: `sudo apt install liblapack-dev`
 
 ### Build and Run
 1: Enter the repository
