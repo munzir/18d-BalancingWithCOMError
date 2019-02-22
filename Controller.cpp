@@ -104,13 +104,13 @@ Controller::Controller(SkeletonPtr _robot)
 
   Eigen::Vector3d EthWheel_Init(0.0, 0.0, 0.0);
   Eigen::Vector3d EthWheel_ObsGains(1159.99999999673, 173438.396407957, 1343839.4084839);
-  mEthWheel = (ESO*) new ESO(EthWheel_Init, EthWheel_ObsGains);
+  mEthWheel = (Eso*) new Eso(EthWheel_Init, EthWheel_ObsGains);
 
   mGuessRobot->setPositions(mRobot->getPositions());
   Eigen::Vector3d COM = mRot0*(getBodyCOM(mGuessRobot)-mxyz0);
   Eigen::Vector3d EthCOM_Init(atan2(COM(0), COM(2)), mdqBody1, 0.0);
   Eigen::Vector3d EthCOM_ObsGains(1159.99999999673, 173438.396407957, 1343839.4084839);
-  mEthCOM = (ESO*) new ESO(EthCOM_Init, EthCOM_ObsGains);
+  mEthCOM = (Eso*) new Eso(EthCOM_Init, EthCOM_ObsGains);
 
   mB_thWheel = Eigen::VectorXd::Zero(3);
   mB_thCOM = Eigen::VectorXd::Zero(3);

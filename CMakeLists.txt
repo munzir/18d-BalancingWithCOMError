@@ -10,16 +10,7 @@ include_directories(${DART_INCLUDE_DIRS})
 
 file(GLOB srcs "Main.cpp"
     "Controller.cpp" "Controller.hpp"
-    "MyWindow.cpp" "MyWindow.hpp"
-    "../18h-Util/lqr.cpp" "../18h-Util/lqr.hpp"
-    "../18h-Util/adrc.cpp" "../18h-Util/adrc.hpp"
-    "../18h-Util/ESO.hpp"
-    "../18h-Util/balance.cpp" "../18h-Util/balance.hpp"
-    "../18h-Util/collision.cpp" "../18h-Util/collision.hpp"
-    "../18h-Util/convert_pose_formats.cpp"
-    "../18h-Util/convert_pose_formats.hpp"
-    "../18h-Util/file_ops.cpp" "../18h-Util/file_ops.hpp"
-    "../18h-Util/random.cpp" "../18h-Util/random.hpp")
+    "MyWindow.cpp" "MyWindow.hpp")
 add_executable(${PROJECT_NAME} ${srcs})
 
-target_link_libraries(${PROJECT_NAME} ${DART_LIBRARIES} nlopt config4cpp lapack)
+target_link_libraries(${PROJECT_NAME} krang-utils ${DART_LIBRARIES} nlopt config4cpp lapack)
