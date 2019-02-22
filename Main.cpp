@@ -34,10 +34,11 @@
 #include <iostream>
 #include <fstream>
 
+#include <krang-utils/balance.hpp>
+#include <krang-utils/file_ops.hpp>
+#include <krang-utils/convert_pose_formats.hpp>
+
 #include "MyWindow.hpp"
-#include "../18h-Util/balance.hpp"
-#include "../18h-Util/file_ops.hpp"
-#include "../18h-Util/convert_pose_formats.hpp"
 
 using namespace std;
 using namespace dart::common;

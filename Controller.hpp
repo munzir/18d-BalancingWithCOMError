@@ -36,10 +36,10 @@
 #include <boost/circular_buffer.hpp>
 #include <config4cpp/Configuration.h>
 
-#include "../18h-Util/lqr.hpp"
-#include "../18h-Util/convert_pose_formats.hpp"
-#include "../18h-Util/random.hpp"
-#include "../18h-Util/adrc.hpp"
+#include <krang-utils/lqr.hpp>
+#include <krang-utils/convert_pose_formats.hpp>
+#include <krang-utils/random.hpp>
+#include <krang-utils/adrc.hpp>
 
 using namespace dart;
 using namespace dart::dynamics;
@@ -156,9 +156,9 @@ public:
   // For plotting purposes
   ofstream mOutFile;
 
-  // ESOs
-  ESO *mEthWheel;
-  ESO *mEthCOM;
+  // Esos
+  Eso *mEthWheel;
+  Eso *mEthCOM;
 };
 
 #endif  // EXAMPLES_OPERATIONALSPACECONTROL_CONTROLLER_HPP_
