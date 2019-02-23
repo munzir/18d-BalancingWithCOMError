@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
     string inputPosesFilename = "../defaultInit.txt";
 
     // INPUT on below line (absolute path of robot)
-    string fullRobotPath = "/home/apatel435/Desktop/WholeBodyControlAttempt1/09-URDF/Krang/Krang.urdf";
+    string fullRobotPath = "/usr/local/share/krang/urdf/Krang/KrangBaseSlopedCollision.urdf";
 
     // INPUT on below line (robot name)
     string robotName = "krang";
@@ -82,9 +82,10 @@ int main(int argc, char* argv[]) {
     // load skeletons
     SkeletonPtr floor = createFloor(floorName);
     SkeletonPtr robot = createKrang(fullRobotPath, robotName);
-    Eigen::MatrixXd balancedPose = angleBalancePose(robot, inputPoses.row(0).transpose());
+    //Eigen::MatrixXd balancedPose = angleBalancePose(robot, inputPoses.row(0).transpose());
 
-    robot->setPositions(munzirToDart(balancedPose.transpose()));
+    //robot->setPositions(munzirToDart(balancedPose.transpose()));
+    robot->setPositions(munzirToDart(inputPoses.row(0)));
 
     world->addSkeleton(floor); //add ground and robot to the world pointer
     world->addSkeleton(robot);
