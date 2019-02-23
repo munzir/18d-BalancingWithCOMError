@@ -49,8 +49,8 @@ Controller::Controller(SkeletonPtr _robot)
   mVirtualWorld->addSkeleton(mGuessRobot);
   mGuessRobot->setPositions(mRobot->getPositions());
 
-  int bodyParams = 4; double minXCOMError = 0.02, maxDeviation = 0.50, maxOffset = 0.50;
-  changeRobotParameters(mGuessRobot, bodyParams, minXCOMError, maxDeviation, maxOffset);
+  //int bodyParams = 4; double minXCOMError = 0.02, maxDeviation = 0.50, maxOffset = 0.50;
+  //changeRobotParameters(mGuessRobot, bodyParams, minXCOMError, maxDeviation, maxOffset);
 
   // ************** Lock joints
   int joints = mRobot->getNumJoints();
@@ -80,8 +80,8 @@ Controller::Controller(SkeletonPtr _robot)
   cfg->destroy();
 
   // ********************************** Introduce CoM error
-  qBody1Change(mRobot, mInitialComAngle);
-  qBody1Change(mGuessRobot, mInitialComAngle);
+  //qBody1Change(mRobot, mInitialComAngle);
+  //qBody1Change(mGuessRobot, mInitialComAngle);
   Eigen::Vector3d com = mRobot->getCOM() - mRobot->getPositions().segment(3,3);
   cout << "robot com: " << com << endl;
   cout << "robot com angle: " << atan2(com(0), com(2))*180.0/M_PI << endl;
@@ -290,6 +290,7 @@ void Controller::update(const Eigen::Vector3d& _LeftTargetPosition,const Eigen::
   const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
   mRobot->setForces(index, mForces);
 
+  std::cout << "thCOM true: " << mthCOM_true << ", thCOM guess: " << mthCOM << std::endl;
 
   // Dump data
   mOutFile << mthCOM_true << ", " << mthCOM << endl;
